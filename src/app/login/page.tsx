@@ -21,7 +21,7 @@ export default async function Login() {
               width={120}
               height={120}
             />
-            CodeControl
+            WFS SP - Gestion
           </Link>
           <div className="w-full overflow-y-auto ">
             <CardHeader>
@@ -73,7 +73,7 @@ export default async function Login() {
                 <Link href="/reset_password" className="text-md m-auto">
                   ¿Olvidaste tu contraseña? <span className="text-blue-400 ml-1 ">restablecela aquí </span>
                 </Link>
-                <GoogleButton />
+                {/* <GoogleButton /> */}
               </form>
             </CardContent>
           </div>
