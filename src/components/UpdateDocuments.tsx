@@ -142,7 +142,7 @@ export default function UpdateDocuments({
         }
 
         const { error: uploadError } = await supabase.storage
-          .from('document_files_expired')
+          .from('document-files-expired')
           .upload(documentName, fileData, { upsert: true });
 
         if (uploadError) {
