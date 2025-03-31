@@ -26,7 +26,7 @@ export default async function Login() {
           <div className="w-full overflow-y-auto">
             <CardHeader>
               <CardTitle className="text-3xl font-semibold tracking-tight lg:text-left text-center text-primary dark:text-white">
-                ¡Es un placer verte de nuevo!
+                ¡Bienvenido al portal de gestion de WFS SP!
               </CardTitle>
             </CardHeader>
             <CardContent>
