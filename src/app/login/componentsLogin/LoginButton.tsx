@@ -57,7 +57,7 @@ export const LoginButton = () => {
   };
   return (
     <Button
-      className="w-[100%] sm:w-[80%] lg:w-[60%] self-center text-lg"
+      className="w-[100%] sm:w-[80%] lg:w-[60%] self-center text-lg bg-secondary hover:bg-secondary/90 text-white"
       formAction={(formData) => clientAccion(formData)}
       disabled={pending}
     >
