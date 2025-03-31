@@ -811,17 +811,7 @@ export default function VehiclesForm2({
                           <Command>
                             <CommandInput disabled={readOnly} placeholder="Buscar marca..." className="h-9" />
                             <CommandEmpty className="py-2 px-2">
-                              <Modal modal="addBrand" fetchData={fetchData}>
-                                <Button
-                                  disabled={readOnly}
-                                  variant="outline"
-                                  role="combobox"
-                                  className={cn('w-full justify-between', !field.value && 'text-muted-foreground')}
-                                >
-                                  Agregar marca
-                                  <PlusCircledIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                </Button>
-                              </Modal>
+                              No se encontró ninguna marca
                             </CommandEmpty>
                             <CommandGroup>
                               {brand_vehicles?.map((option) => (
@@ -842,6 +832,17 @@ export default function VehiclesForm2({
                                   />
                                 </CommandItem>
                               ))}
+                              <Modal modal="addBrand" fetchData={fetchData}>
+                                <Button
+                                  disabled={readOnly}
+                                  variant="outline"
+                                  role="combobox"
+                                  className={cn('w-full justify-between', !field.value && 'text-muted-foreground')}
+                                >
+                                  Agregar marca
+                                  <PlusCircledIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                </Button>
+                              </Modal>
                             </CommandGroup>
                           </Command>
                         </PopoverContent>
