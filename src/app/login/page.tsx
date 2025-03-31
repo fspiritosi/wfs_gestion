@@ -6,25 +6,26 @@ import { Separator } from '@/components/ui/separator';
 import Image from 'next/image';
 import Link from 'next/link';
 import { LoginButton } from './componentsLogin/LoginButton';
+
 export default async function Login() {
   return (
-    <section className="min-h-screen overflow-hidden bg-white dark:bg-transparent">
+    <section className="min-h-screen overflow-hidden bg-white dark:bg-primary">
       <div className="container relative flex-col grid-cols-1 justify-center md:grid lg:max-w-none lg:grid-cols-2 lg:px-0  md:px-2 p-0">
         <RenderBanner />
-        <div className="lg:p-8 relative z-50   md:p-8 pt-7 p-0 flex flex-col justify-center items-center w-full">
-          <Link className="relative z-20 lg:hidden items-center font-bold text-2xl flex" href="/">
+        <div className="lg:p-8 relative z-50 md:p-8 pt-7 p-0 flex flex-col justify-center items-center w-full">
+          <Link className="relative z-20 lg:hidden items-center font-bold text-2xl flex text-primary" href="/">
             <Image
-              src="https://zktcbhhlcksopklpnubj.supabase.co/storage/v1/object/public/logo/24417298440.png"
-              alt="Logo de codecontrol"
+              src="/logo_WFS_SP_color.png"
+              alt="Logo de WFS"
               className="size-12 mr-4"
               width={120}
               height={120}
             />
             WFS SP - Gestion
           </Link>
-          <div className="w-full overflow-y-auto ">
+          <div className="w-full overflow-y-auto">
             <CardHeader>
-              <CardTitle className="text-3xl font-semibold tracking-tight lg:text-left text-center">
+              <CardTitle className="text-3xl font-semibold tracking-tight lg:text-left text-center text-primary dark:text-white">
                 ¡Es un placer verte de nuevo!
               </CardTitle>
             </CardHeader>
@@ -65,12 +66,12 @@ export default async function Login() {
                 <div className="flex w-full justify-center flex-col items-center gap-2">
                   <LoginButton />
                   {/* <Link href="/register" className="text-md">
-                    ¿No tienes una cuenta? <span className="text-blue-400 ml-1 ">Créate una aquí</span>
+                    ¿No tienes una cuenta? <span className="text-secondary ml-1 ">Créate una aquí</span>
                   </Link> */}
                 </div>
-                <Separator orientation="horizontal" className="my-2 w-[70%] self-center" />
+                <Separator orientation="horizontal" className="my-2 w-[70%] self-center bg-secondary/50" />
                 {/* <Link href="/reset_password" className="text-md m-auto">
-                  ¿Olvidaste tu contraseña? <span className="text-blue-400 ml-1 ">restablecela aquí </span>
+                  ¿Olvidaste tu contraseña? <span className="text-secondary ml-1 ">restablecela aquí </span>
                 </Link> */}
                 {/* <GoogleButton /> */}
               </form>
