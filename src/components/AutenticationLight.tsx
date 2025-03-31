@@ -11,13 +11,12 @@ function AutenticationLight() {
       </div>
       <Link className="relative z-20 flex items-center font-bold text-2xl dark:text-white" href="/">
         <Image
-          src="https://zktcbhhlcksopklpnubj.supabase.co/storage/v1/object/public/logo/24417298440.png"
+          src="/logo_WFS_SP_color.png"
           alt="Logo de codecontrol"
-          className=" size-12 mr-4 relative z-40"
+          className=" size-54 mr-4 relative z-40"
           width={120}
           height={120}
         />
-        CodeControl
       </Link>
       <div className="relative z-20 mt-auto ">
         <blockquote className="space-y-2">
@@ -25,7 +24,9 @@ function AutenticationLight() {
             Combinamos control de procesos, desarrollo de software y consultoría organizacional para ofrecerte
             soluciones integrales que generan resultados reales.
           </p>
-          <footer className="text-md dark:text-white">CodeControl</footer>
+          <footer className="text-md dark:text-white">
+            WFS
+          </footer>
         </blockquote>
       </div>
     </div>
