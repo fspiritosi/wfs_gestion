@@ -96,7 +96,7 @@ export default async function CompanyPage() {
           buttonActioRestricted: [''],
           buttonAction: (
             <Link
-              href={'/dashboard/company/contact/action?action=new'}
+              href={'/dashboard/company/actualCompany/contact/action?action=new'}
               className={buttonVariants({ variant: 'default' })}
             >
               Registrar Contacto
