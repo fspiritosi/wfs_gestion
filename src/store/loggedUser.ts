@@ -1023,6 +1023,14 @@ export const useLoggedUserStore = create<State>((set, get) => {
     })
     .subscribe();
 
+  const realTimeVehicles = supabase
+    .channel('custom-update-channel')
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'vehicles' }, (payload) => {
+      setActivesVehicles();
+    })
+    .subscribe();
+    
+
   const realTimeCompany = supabase
     .channel('custom-all-channel')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'company' }, () => {
