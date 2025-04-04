@@ -7,54 +7,59 @@ import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { CarIcon } from 'lucide-react';
 import Link from 'next/link';
+import { useEffect } from 'react'; // Añade esta importación
 import { Badge } from './ui/badge';
 import { buttonVariants } from './ui/button';
+
 export const MissingDocumentList = () => {
-  const allValuesToShow = [useLoggedUserStore((state) => state.allDocumentsToShow)].reduce(
-    (acc: { employees: Document[][]; vehicles: Document[][] }, current) => {
-      const employeesDocuments = current?.employees?.filter(
-        (item) =>
-          item.document_path !== null &&
-          item.state.toLocaleLowerCase() === 'pendiente' &&
-          item.is_active &&
-          item.mandatory === 'Si' &&
-          !item.isItMonthly
-      );
-      const companyDocuments = current?.vehicles?.filter(
-        (item) =>
-          item.document_path !== null &&
-          item.state.toLocaleLowerCase() === 'pendiente' &&
-          item.is_active &&
-          item.mandatory === 'Si' &&
-          !item.isItMonthly
-      );
+  const { allDocumentsToShow, documetsFetch, actualCompany } = useLoggedUserStore();
 
-      const groupedEmployees: { [key: string]: any[] } = employeesDocuments?.reduce(
-        (grouped: { [key: string]: any[] }, item) => {
-          (grouped[item.resource] = grouped[item.resource] || []).push(item);
-          return grouped;
-        },
-        {}
-      );
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        await documetsFetch(); // Actualiza los documentos
+      } catch (error) {
+        console.error('Error al cargar documentos:', error);
+      }
+    };
 
-      const groupedVehicles: { [key: string]: any[] } = companyDocuments?.reduce(
-        (grouped: { [key: string]: any[] }, item) => {
-          (grouped[item.resource] = grouped[item.resource] || []).push(item);
-          return grouped;
-        },
-        {}
-      );
-
-      return {
-        employees: groupedEmployees ? Object.values(groupedEmployees) : [],
-        vehicles: groupedVehicles ? Object.values(groupedVehicles) : [],
-      };
-    },
-    {
-      employees: [[]],
-      vehicles: [[]],
+    if (actualCompany?.id) {
+      fetchData();
     }
+  }, [actualCompany?.id]);
+
+  const employeesDocuments = allDocumentsToShow?.employees?.filter(
+    (item) =>
+      item.document_path !== null &&
+      item.state.toLowerCase() === 'pendiente' &&
+      item.is_active &&
+      item.mandatory === 'Si' &&
+      !item.isItMonthly
   );
+
+  const vehiclesDocuments = allDocumentsToShow?.vehicles?.filter(
+    (item) =>
+      item.document_path !== null &&
+      item.state.toLowerCase() === 'pendiente' &&
+      item.is_active &&
+      item.mandatory === 'Si' &&
+      !item.isItMonthly
+  );
+
+  const groupedEmployees = employeesDocuments?.reduce((grouped: { [key: string]: any[] }, item) => {
+    (grouped[item.resource] = grouped[item.resource] || []).push(item);
+    return grouped;
+  }, {});
+
+  const groupedVehicles = vehiclesDocuments?.reduce((grouped: { [key: string]: any[] }, item) => {
+    (grouped[item.resource] = grouped[item.resource] || []).push(item);
+    return grouped;
+  }, {});
+
+  const allValuesToShow = {
+    employees: groupedEmployees ? Object.values(groupedEmployees) : [],
+    vehicles: groupedVehicles ? Object.values(groupedVehicles) : [],
+  };
 
   return (
     <Card className="overflow-hidden">
