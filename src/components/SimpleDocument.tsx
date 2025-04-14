@@ -120,7 +120,7 @@ export default function SimpleDocument({
 
         const updateEntries = documents?.map((entry: any) => {
           return {
-            applies: entry.applies || idApplies,
+            applies: entry.applies || idApplies?.id,
             id_document_types: entry.id_document_types,
             validity: entry.validity ? new Date(entry.validity).toISOString() : null,
             user_id: user,
@@ -207,16 +207,18 @@ export default function SimpleDocument({
               state: 'presentado',
               period: updateEntries[index].period || null,
             };
+            console.log(idApplies, 'idApplies');
+            console.log(updateEntries[index].applies, ' updateEntries[index].applies');
             const { error, data: userupdated } = await supabase
               .from(tableName)
               .update(data)
-              .eq('applies', idApplies || updateEntries[index].applies)
+              .eq('applies', idApplies?.id || updateEntries[index].applies)
               .eq('id_document_types', updateEntries[index].id_document_types);
 
             if (error) {
               setLoading(false);
               hasError = true;
-
+              console.log(error, 'aqui fue');
               throw new Error('Hubo un error al subir los documentos a la base de datos');
             }
           } else {
@@ -225,7 +227,7 @@ export default function SimpleDocument({
               document_path: response?.path,
               created_at: new Date(),
               state: 'presentado',
-              applies: idApplies || updateEntries[index].applies,
+              applies: idApplies?.id || updateEntries[index].applies,
               id_document_types: updateEntries[index].id_document_types,
               user_id: user,
               period: updateEntries[index].period || null,
@@ -734,7 +736,7 @@ export default function SimpleDocument({
             );
           })}
         </div>
-        <div className="w-full flex justify-end">
+        {/* <div className="w-full flex justify-end">
           <Button
             className=" w-8 h-8 bg-blue-400 rounded-full hover:bg-blue-500 transition-colors duration-200 ease-in-out"
             onClick={() =>
@@ -750,7 +752,7 @@ export default function SimpleDocument({
           >
             <PlusCircledIcon className=" h-4 w-4 shrink-0" />
           </Button>
-        </div>
+        </div> */}
       </ul>
       <div className="flex justify-evenly mt-2">
         <AlertDialogCancel className="text-black dark:bg-white hover:text-black/50" asChild>
