@@ -297,6 +297,10 @@ export const accordionSchema = z
     nationality: z.string({
       required_error: 'La nacionalidad es requerida',
     }),
+    born_date: z
+    .date({
+      required_error: 'La fecha de nacimiento es requerida',
+    }),
     cuil: z
       .string({ required_error: 'El cuil es requerido' })
       .refine((value) => /^\d{11}$/.test(value), {

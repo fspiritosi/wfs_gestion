@@ -21,7 +21,6 @@ import {
   genderOptionsENUM,
   instrutionsOptionsENUM,
   nacionaliOptionsENUM,
-  typeOfContractENUM,
 } from '@/types/enums';
 import { names } from '@/types/types';
 import { accordionSchema } from '@/zodSchemas/schemas';
@@ -40,6 +39,7 @@ import { z } from 'zod';
 import { supabase } from '../../supabase/supabase';
 import BackButton from './BackButton';
 
+import moment from 'moment';
 import AddCategoryModal from './AddCategoryModal';
 import AddCovenantModal from './AddCovenantModal';
 import AddGuildModal from './AddGuildModal';
@@ -58,46 +58,10 @@ type Province = {
   id: number;
   name: string;
 };
-type dataType = {
-  guild: {
-    name: string;
-    id: string;
-    is_active: boolean;
-  }[];
-  covenants: {
-    name: string;
-    number: string;
-    guild_id: string;
-    id: string;
-    is_active: boolean;
-  }[];
-  category: {
-    name: string;
-    id: string;
-    covenant_id: string;
-    is_active: boolean;
-  }[];
-};
-
-type diagram = {
-  id: string;
-  created_at: string;
-  employee_id: string;
-  diagram_type: {
-    id: string;
-    name: string;
-    color: string;
-    company_id: string;
-    created_at: string;
-    short_description: string;
-  };
-  day: number;
-  month: number;
-  year: number;
-};
 
 export default function EmployeeComponent({
   guild,
+  cost_center,
   user,
   diagrams,
   covenants,
@@ -107,7 +71,11 @@ export default function EmployeeComponent({
   activeEmploees,
   historyData,
   role,
+  contract_types,
 }: {
+  contract_types: ContractType[];
+
+  cost_center: CostCenter[];
   historyData: any;
   role: string | null;
   user: any;
@@ -163,12 +131,15 @@ export default function EmployeeComponent({
   const url = process.env.NEXT_PUBLIC_PROJECT_URL;
   const mandatoryDocuments = useCountriesStore((state) => state.mandatoryDocuments);
 
+  console.log(user, 'user');
+
   const form = useForm<z.infer<typeof accordionSchema>>({
     resolver: zodResolver(accordionSchema),
     defaultValues: user || {
       lastname: '',
       firstname: '',
       nationality: undefined,
+      born_date: undefined,
       cuil: '',
       document_type: undefined,
       document_number: '',
@@ -194,6 +165,7 @@ export default function EmployeeComponent({
       guild_id: undefined,
       covenants_id: undefined,
       category_id: undefined,
+      cost_center_id: undefined,
     },
   });
 
@@ -266,6 +238,12 @@ export default function EmployeeComponent({
       placeholder: 'Nacionalidad',
       options: nacionaliOptionsENUM,
       name: 'nationality',
+    },
+    {
+      label: 'Fecha de nacimiento',
+      type: 'text',
+      placeholder: 'Fecha de nacimiento',
+      name: 'born_date',
     },
     {
       label: 'CUIL',
@@ -407,7 +385,7 @@ export default function EmployeeComponent({
       label: 'Tipo de contrato',
       type: 'select',
       placeholder: 'Tipo de contrato',
-      options: typeOfContractENUM,
+      options: contract_types.map((contractType) => contractType.name),
       name: 'type_of_contract',
     },
     {
@@ -458,6 +436,16 @@ export default function EmployeeComponent({
         }),
       name: 'category_id',
     },
+    {
+      label: 'Centro de costo',
+      type: 'combobox',
+      placeholder: 'Centro de costo',
+      options: cost_center.map((e) => ({
+        label: e.name,
+        value: e.id,
+      })),
+      name: 'cost_center_id',
+    },
   ];
 
   const handleProvinceChange = (name: any) => {
@@ -477,6 +465,7 @@ export default function EmployeeComponent({
             values.date_of_admission instanceof Date
               ? values.date_of_admission.toISOString()
               : values.date_of_admission,
+          born_date: values.born_date instanceof Date ? values.born_date.toISOString() : values.born_date,
           province: String(provincesOptions.find((e) => e.name.trim() === values.province)?.id),
           birthplace: String(countryOptions.find((e) => e.name === values.birthplace)?.id),
           city: String(citysOptions.find((e) => e.name.trim() === values.city)?.id),
@@ -569,13 +558,15 @@ export default function EmployeeComponent({
             values.date_of_admission instanceof Date
               ? values.date_of_admission.toISOString()
               : values.date_of_admission,
+          born_date: values.born_date instanceof Date ? values.born_date.toISOString() : values.born_date,
           province: String(provincesOptions.find((e) => e.name.trim() === values.province)?.id),
           birthplace: String(countryOptions.find((e) => e.name === values.birthplace)?.id),
           city: String(citysOptions.find((e) => e.name.trim() === values.city)?.id),
           hierarchical_position: String(hierarchyOptions.find((e) => e.name === values.hierarchical_position)?.id),
           workflow_diagram: String(workDiagramOptions.find((e) => e.name === values.workflow_diagram)?.id),
         };
-        //console.log(finalValues, 'finalValues');
+
+        console.log(finalValues, 'finalValues');
         const result = compareContractorEmployees(user, finalValues as any);
         result.valuesToRemove.forEach(async (e) => {
           const { error } = await supabase
@@ -647,8 +638,8 @@ export default function EmployeeComponent({
         const renamedFile = new File([imageFile], `${document_number}.${fileExtension}`, {
           type: `image/${fileExtension?.replace(/\s/g, '')}`,
         });
-        await uploadImage(renamedFile, 'employee-photos');
-        const employeeImage = `${url}/employee-photos/${document_number}.${fileExtension}?timestamp=${Date.now()}`
+        await uploadImage(renamedFile, 'employee_photos');
+        const employeeImage = `${url}/employee_photos/${document_number}.${fileExtension}?timestamp=${Date.now()}`
           .trim()
           .replace(/\s/g, '');
         const { data, error } = await supabase
@@ -669,7 +660,7 @@ export default function EmployeeComponent({
   const nextMonth = addMonths(new Date(), 1);
   const [month, setMonth] = useState<Date>(nextMonth);
 
-  const yearsAhead = Array.from({ length: 20 }, (_, index) => {
+  const yearsAhead = Array.from({ length: 70 }, (_, index) => {
     const year = today.getFullYear() - index - 1;
     return year;
   });
@@ -929,6 +920,101 @@ export default function EmployeeComponent({
               )}
               <div className="min-w-full max-w-sm flex flex-wrap gap-8 items-center">
                 {PERSONALDATA?.map((data, index) => {
+                  if (data.name === 'born_date') {
+                    return (
+                      // <div key={crypto.randomUUID()} className="w-[300px] flex flex-col gap-2">
+                      <div key={data.name} className="w-[300px] flex flex-col gap-2">
+                        <FormField
+                          control={form.control}
+                          name="born_date"
+                          render={({ field }) => {
+                            const value = field.value;
+
+                            if (value === 'undefined/undefined/undefined' || value === 'Invalid Date') {
+                              field.value = '';
+                            }
+
+                            return (
+                              <FormItem className="flex flex-col">
+                                <FormLabel>
+                                  Fecha de nacimiento <span style={{ color: 'red' }}> *</span>
+                                </FormLabel>
+                                <Popover>
+                                  <PopoverTrigger asChild>
+                                    <FormControl>
+                                      <Button
+                                        disabled={readOnly}
+                                        variant="outline"
+                                        className={cn(
+                                          'w-[300px] pl-3 text-left font-normal',
+                                          !field.value && 'text-muted-foreground'
+                                        )}
+                                      >
+                                        {field.value ? (
+                                          moment(field.value, 'YYYY-MM-DD').format('DD/MM/YYYY')
+                                        ) : (
+                                          <span>Elegir fecha</span>
+                                        )}
+                                        <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                      </Button>
+                                    </FormControl>
+                                  </PopoverTrigger>
+                                  <PopoverContent className="flex w-full flex-col space-y-2 p-2" align="start">
+                                    <Select
+                                      onValueChange={(e) => {
+                                        setMonth(new Date(e));
+                                        setYear(e);
+                                        const newYear = parseInt(e, 10);
+                                        const dateWithNewYear = new Date(field.value);
+                                        dateWithNewYear.setFullYear(newYear);
+                                        field.onChange(dateWithNewYear);
+                                        setMonth(dateWithNewYear);
+                                      }}
+                                      value={years || today.getFullYear().toString()}
+                                    >
+                                      <SelectTrigger>
+                                        <SelectValue placeholder="Elegir año" />
+                                      </SelectTrigger>
+                                      <SelectContent position="popper">
+                                        <SelectItem
+                                          value={today.getFullYear().toString()}
+                                          disabled={years === today.getFullYear().toString()}
+                                        >
+                                          {today.getFullYear().toString()}
+                                        </SelectItem>
+                                        {yearsAhead?.map((year) => (
+                                          <SelectItem key={year} value={`${year}`}>
+                                            {year}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                    <Calendar
+                                      month={month}
+                                      onMonthChange={setMonth}
+                                      toDate={today}
+                                      locale={es}
+                                      mode="single"
+                                      // selected={new Date(field.value) || today}
+                                      selected={
+                                        field.value
+                                          ? moment(field.value, 'YYYY-MM-DD').toDate() // esto mantiene la fecha tal cual sin shift
+                                          : today
+                                      }
+                                      onSelect={(e) => {
+                                        field.onChange(e);
+                                      }}
+                                    />
+                                  </PopoverContent>
+                                </Popover>
+                                <FormMessage />
+                              </FormItem>
+                            );
+                          }}
+                        />
+                      </div>
+                    );
+                  }
                   if (data.type === 'file') {
                     return (
                       // <div key={crypto.randomUUID()} className="w-[300px] flex  gap-2">
@@ -1143,10 +1229,15 @@ export default function EmployeeComponent({
                                           !field.value && 'text-muted-foreground'
                                         )}
                                       >
-                                        {field.value ? (
+                                        {/* {field.value ? (
                                           format(field?.value, 'PPP', {
                                             locale: es,
                                           } as any)
+                                        ) : (
+                                          <span>Elegir fecha</span>
+                                        )} */}
+                                        {field.value ? (
+                                          moment(field.value, 'YYYY-MM-DD').format('DD/MM/YYYY')
                                         ) : (
                                           <span>Elegir fecha</span>
                                         )}
@@ -1190,7 +1281,12 @@ export default function EmployeeComponent({
                                       toDate={today}
                                       locale={es}
                                       mode="single"
-                                      selected={new Date(field.value) || today}
+                                      // selected={new Date(field.value) || today}
+                                      selected={
+                                        field.value
+                                          ? moment(field.value, 'YYYY-MM-DD').toDate() // esto mantiene la fecha tal cual sin shift
+                                          : today
+                                      }
                                       onSelect={(e) => {
                                         field.onChange(e);
                                       }}
