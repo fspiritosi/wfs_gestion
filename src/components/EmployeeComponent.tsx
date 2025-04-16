@@ -685,7 +685,7 @@ export default function EmployeeComponent({
   const nextMonth = addMonths(new Date(), 1);
   const [month, setMonth] = useState<Date>(nextMonth);
 
-  const yearsAhead = Array.from({ length: 20 }, (_, index) => {
+  const yearsAhead = Array.from({ length: 70 }, (_, index) => {
     const year = today.getFullYear() - index - 1;
     return year;
   });
