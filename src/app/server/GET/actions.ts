@@ -125,6 +125,47 @@ export const fetchAllEmployees = async (role?: string) => {
   }
   return data;
 };
+// Employee-related actions
+export const fetchAllEmployeesWithRelations = async () => {
+  const cookiesStore = cookies();
+  const supabase = supabaseServer();
+  const company_id = cookiesStore.get('actualComp')?.value;
+  const user = await fetchCurrentUser();
+  if (!company_id) return [];
+
+  let { data, error } = await supabase
+    .from('employees')
+    .select(
+      `*,guild(*),covenant(*),category(*), city (
+    *
+  ),
+  province(
+    *
+  ),
+  workflow_diagram(
+    *
+  ),
+  hierarchical_position(
+    *
+  ),
+  birthplace(
+    *
+  ),
+  contractor_employee(
+    customers(
+      *
+    )
+  )`
+    )
+    .eq('company_id', company_id || '')
+    .returns<EmployeeDetailed[]>();
+
+  if (error) {
+    console.error('Error fetching employees:', error);
+    return [];
+  }
+  return data ?? [];
+};
 export const fetchAllActivesEmployees = async () => {
   const cookiesStore = cookies();
   const supabase = supabaseServer();
@@ -452,6 +493,20 @@ export const getDocumentEquipmentById = async (id: string) => {
     .eq('id', id);
   return documents_vehicle;
 };
+
+export const fetchServerRole = async () => {
+  const cookiesStore = cookies();
+  const supabase = supabaseServer();
+  const company_id = cookiesStore.get('actualComp')?.value;
+  if (!company_id) return [];
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const role = await getActualRole(company_id as string, user?.id as string);
+
+  return role;
+};
+
 // Equipment-related actions
 export const fetchAllEquipment = async (company_equipment_id?: string) => {
   const cookiesStore = cookies();

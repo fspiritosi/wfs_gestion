@@ -39,6 +39,9 @@ declare global {
   type contractor = DB['public']['Tables']['contractors']['Row'];
   type customers = DB['public']['Tables']['customers']['Row'];
   type ShareCompanyUsers = DB['public']['Tables']['share_company_users']['Row'];
+  type Guild = DB['public']['Tables']['guild']['Row'];
+  type Covenant = DB['public']['Tables']['covenant']['Row'];
+  type Category = DB['public']['Tables']['category']['Row'];
 
   //! Enums
   type RepairStatusEnum = DB['public']['Enums']['repair_state']; // Anteriormente: EnumOfRepairStatus
@@ -53,8 +56,8 @@ declare global {
   interface diagrams_logsWithUser extends Omit<diagrams_logs, 'modified_by'> {
     modified_by: UserProfile; // Anteriormente: Profile
   }
-  interface EmployeeDiagramWithDiagramType extends Omit<EmployeeDiagram, 'diagram_type'|'employee_id'> {
-    diagram_type: DiagramType; 
+  interface EmployeeDiagramWithDiagramType extends Omit<EmployeeDiagram, 'diagram_type' | 'employee_id'> {
+    diagram_type: DiagramType;
     employee_id: Employee;
   }
 
@@ -102,6 +105,9 @@ declare global {
       Employee,
       'city' | 'province' | 'workflow_diagram' | 'hierarchical_position' | 'birthplace' | 'contractor_employee'
     > {
+    guild: Guild;
+    covenant: Covenant;
+    category: Category;
     // Anteriormente: EmployeeWithRelations
     city: City; // Anteriormente: City
     province: Province; // Anteriormente: Province
@@ -164,10 +170,10 @@ declare global {
     };
   }
 
-interface contractor_equipmentWithContractor extends Omit<contractor_equipment, 'contractor_id'> {
+  interface contractor_equipmentWithContractor extends Omit<contractor_equipment, 'contractor_id'> {
     // Anteriormente: contractor_equipmentWithContractor
     contractor_id: customers; // Anteriormente: CompanyWithRelations
-}
+  }
 
   // Relaciones para ShareCompanyUsers con Equipment
   interface ShareCompanyUsersWithEquipment extends Omit<ShareCompanyUsers, 'customer_id'> {
@@ -190,7 +196,7 @@ interface contractor_equipmentWithContractor extends Omit<contractor_equipment, 
   }
 
   // Relaciones de Vehicle
-  interface VehicleWithBrand extends Omit<Vehicle, 'brand' | 'model' | 'type'|'contractor_equipment'> {
+  interface VehicleWithBrand extends Omit<Vehicle, 'brand' | 'model' | 'type' | 'contractor_equipment'> {
     // Anteriormente: VehiclesWithBrand
     brand: VehicleBrand; // Anteriormente: Brand
     model: TypeOfVehicle; // Anteriormente: Model
