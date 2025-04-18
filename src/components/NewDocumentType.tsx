@@ -11,7 +11,6 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { handleSupabaseError } from '@/lib/errorHandler';
 import { cn } from '@/lib/utils';
 import { useCountriesStore } from '@/store/countries';
 import { useLoggedUserStore } from '@/store/loggedUser';
@@ -19,8 +18,6 @@ import { InfoCircledIcon } from '@radix-ui/react-icons';
 import { PlusCircle, Users, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { toast } from 'sonner';
-import { supabase } from '../../supabase/supabase';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Badge } from './ui/badge';
@@ -49,6 +46,9 @@ const baseEmployeePropertiesConfig = [
   { label: 'Gremio', accessor_key: 'guild' }, // Puede ser null o un objeto con propiedad name
   { label: 'Convenio', accessor_key: 'covenant' }, // Puede ser null o un objeto con propiedad name
   { label: 'Categoría', accessor_key: 'category' }, // Puede ser null o un objeto con propiedad name
+
+  // Array de objetos anidados
+  { label: 'Clientes', accessor_key: 'contractor_employee' }, // Array de objetos donde cada uno tiene customers.name
 ];
 
 const defaultValues = [
@@ -118,13 +118,23 @@ export default function NewDocumentType({
       .trim();
   }
 
-  // Utilidad para obtener el valor normalizado de una propiedad de empleado
+  // Devuelve el valor de la propiedad del empleado (ya normalizado para comparar)
   function getEmployeePropertyValue(employee: any, accessor_key: string): string {
     let value = employee[accessor_key as keyof typeof employee];
-    let result: string;
+    let result = '';
 
+    // Caso especial: contractor_employee (array de objetos cliente)
+    if (accessor_key === 'contractor_employee' && Array.isArray(value)) {
+      // Extraer nombres de clientes del array contractor_employee
+      const clientNames = value
+        .filter((item) => item && item.customers && item.customers.name)
+        .map((item) => item.customers.name);
+
+      // Si hay clientes, unirlos en un string; si no, valor vacío
+      result = clientNames.length > 0 ? clientNames.join(',') : '';
+    }
     // Maneja diferentes tipos de valores de propiedades
-    if (value && typeof value === 'object' && 'name' in value) {
+    else if (value && typeof value === 'object' && 'name' in value) {
       // Objetos con propiedad name (provincia, ciudad, etc.)
       result = value.name ? String(value.name).trim() : '';
     } else if (typeof value === 'boolean') {
@@ -137,8 +147,8 @@ export default function NewDocumentType({
       // Otros tipos de valores
       result = value !== undefined && value !== null ? String(value).trim() : '';
     }
-    
-    console.log('[getEmployeePropertyValue]', { accessor_key, value, result, employee });
+
+    console.log('[getEmployeePropertyValue]', { accessor_key, value, result });
     return result;
   }
 
@@ -157,10 +167,10 @@ export default function NewDocumentType({
         // Obtener empleados de la API
         const empleadosCargados = await fetchAllEmployeesWithRelations();
         if (!isMounted) return;
-        
+
         // Establecer empleados
         setEmployees(empleadosCargados);
-        
+
         // Extraer valores únicos para cada propiedad
         const updatedConfig = baseEmployeePropertiesConfig.map((prop) => {
           let values = empleadosCargados
@@ -169,10 +179,10 @@ export default function NewDocumentType({
           values = Array.from(new Set(values));
           return { ...prop, values };
         });
-        
+
         // Actualizar configuración de propiedades
         setEmployeePropertiesConfig(updatedConfig);
-        
+
         // Inicialmente, todos los empleados coinciden (no hay filtros)
         setMatchingEmployees(empleadosCargados);
       } catch (error) {
@@ -181,31 +191,58 @@ export default function NewDocumentType({
     };
 
     fetchAndSetupEmployees();
-    
+
     // Limpieza al desmontar
-    return () => { isMounted = false; };
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   // 2. Función que filtra empleados según las condiciones
   function filterEmployeesByConditions(empleados: any[], condiciones: any[], propConfig: any[]) {
     // Si no hay condiciones, mostrar todos los empleados
     if (!condiciones.length) return empleados;
-    
+
     console.log('[Filtro] condiciones:', condiciones);
-    
+
     return empleados.filter((employee) => {
       // El empleado debe cumplir TODAS las condiciones (AND entre condiciones)
       const cumple = condiciones.every((condition) => {
         // Si la condición no tiene propiedad o valores, se omite
         if (!condition.property || !condition.values.length) return true;
-        
+
         // Buscar la configuración de la propiedad
         const propertyConfig = propConfig.find((config) => config.label === condition.property);
         if (!propertyConfig) return true;
-        
-        // Obtener el valor del empleado para esta propiedad
+
+        // Caso especial para clientes (contractor_employee)
+        if (propertyConfig.accessor_key === 'contractor_employee') {
+          const contractorEmployees = employee.contractor_employee || [];
+
+          // Verificar si el empleado tiene al menos uno de los clientes seleccionados
+          const tieneAlgunClienteSeleccionado = condition.values.some((clienteSeleccionado: string) => {
+            return contractorEmployees.some(
+              (contrato: any) =>
+                contrato &&
+                contrato.customers &&
+                normalizeString(contrato.customers.name) === normalizeString(clienteSeleccionado)
+            );
+          });
+
+          if (tieneAlgunClienteSeleccionado) {
+            console.log('[Filtro] MATCH CLIENTE', {
+              employee: employee.firstname,
+              clientes: contractorEmployees.map((c: any) => c.customers?.name),
+              buscados: condition.values,
+            });
+          }
+
+          return tieneAlgunClienteSeleccionado;
+        }
+
+        // Para el resto de propiedades, comportamiento normal
         const employeeValue = getEmployeePropertyValue(employee, propertyConfig.accessor_key);
-        
+
         // El empleado cumple si coincide con AL MENOS UNO de los valores (OR entre valores)
         const resultado = condition.values.some((v: string) => {
           // Usar normalizeString para una comparación más robusta
@@ -215,7 +252,7 @@ export default function NewDocumentType({
           }
           return match;
         });
-        
+
         if (!resultado) {
           console.log('[Filtro] NO MATCH', {
             employee,
@@ -224,14 +261,14 @@ export default function NewDocumentType({
             valores: condition.values,
           });
         }
-        
+
         return resultado;
       });
-      
+
       if (cumple) {
         console.log('[Filtro] EMPLEADO INCLUÍDO', employee);
       }
-      
+
       return cumple;
     });
   }
@@ -306,33 +343,35 @@ export default function NewDocumentType({
       private: values.private,
     };
 
-    toast.promise(
-      async () => {
-        const { data, error } = await supabase.from('document_types').insert(formattedValues).select();
+    console.log('formattedValues', formattedValues);
 
-        if (error) {
-          throw new Error(handleSupabaseError(error.message));
-        }
-      },
-      {
-        loading: 'Creando documento...',
-        success: (data) => {
-          fetchDocumentTypes(useLoggedUserStore.getState().actualCompany?.id || '');
-          fetchDocuments();
-          router.refresh();
-          if (codeControlClient) {
-            document.getElementById('close_document_modal')?.click();
-            return 'El documento se ha creado correctamente';
-          } else {
-            router.push('/auditor');
-            return 'El documento se ha creado correctamente';
-          }
-        },
-        error: (error) => {
-          return error;
-        },
-      }
-    );
+    // toast.promise(
+    //   async () => {
+    //     const { data, error } = await supabase.from('document_types').insert(formattedValues).select();
+
+    //     if (error) {
+    //       throw new Error(handleSupabaseError(error.message));
+    //     }
+    //   },
+    //   {
+    //     loading: 'Creando documento...',
+    //     success: (data) => {
+    //       fetchDocumentTypes(useLoggedUserStore.getState().actualCompany?.id || '');
+    //       fetchDocuments();
+    //       router.refresh();
+    //       if (codeControlClient) {
+    //         document.getElementById('close_document_modal')?.click();
+    //         return 'El documento se ha creado correctamente';
+    //       } else {
+    //         router.push('/auditor');
+    //         return 'El documento se ha creado correctamente';
+    //       }
+    //     },
+    //     error: (error) => {
+    //       return error;
+    //     },
+    //   }
+    // );
   }
 
   function formatName(name: string): string {
@@ -354,15 +393,11 @@ export default function NewDocumentType({
 
   // Actualiza los valores de una condición existente
   const updateConditionValues = (id: string, values: string[]) => {
-    setConditions((prev) => 
-      prev.map((condition) => 
-        condition.id === id ? { ...condition, values } : condition
-      )
-    );
+    setConditions((prev) => prev.map((condition) => (condition.id === id ? { ...condition, values } : condition)));
   };
-  
+
   const [showEmployeePreview, setShowEmployeePreview] = useState(false);
-  
+
   // Elimina una condición por su ID
   const removeCondition = (id: string) => {
     setConditions(conditions.filter((condition) => condition.id !== id));
