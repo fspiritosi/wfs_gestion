@@ -11,6 +11,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { handleSupabaseError } from '@/lib/errorHandler';
 import { cn } from '@/lib/utils';
 import { useCountriesStore } from '@/store/countries';
 import { useLoggedUserStore } from '@/store/loggedUser';
@@ -18,6 +19,8 @@ import { InfoCircledIcon } from '@radix-ui/react-icons';
 import { PlusCircle, Users, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
+import { supabase } from '../../supabase/supabase';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Badge } from './ui/badge';
@@ -38,7 +41,7 @@ const baseEmployeePropertiesConfig = [
   { label: 'Posición en la Compañía', accessor_key: 'company_position' },
 
   // Propiedades de objetos anidados - Se manejarán especialmente en getUniqueValues
-  { label: 'País de Nacimiento', accessor_key: 'birthplace' }, // Es un objeto con propiedad name
+  { label: 'País de Nacimiento', accessor_key: 'province' }, // Es un objeto con propiedad name
   { label: 'Provincia', accessor_key: 'province' }, // Es un objeto con propiedad name
   { label: 'Ciudad', accessor_key: 'city' }, // Es un objeto con propiedad name
   { label: 'Posición Jerárquica', accessor_key: 'hierarchical_position' }, // Es un objeto con propiedad name
@@ -50,6 +53,49 @@ const baseEmployeePropertiesConfig = [
   // Array de objetos anidados
   { label: 'Clientes', accessor_key: 'contractor_employee' }, // Array de objetos donde cada uno tiene customers.name
 ];
+
+//  Mapeo entre accessor_key y metadatos de relación para futura construcción de SQL
+const relationMeta: Record<string, any> = {
+  contractor_employee: {
+    relation_type: 'many_to_many',
+    relation_table: 'contractor_employee',
+    column_on_employees: 'id',
+    column_on_relation: 'employee_id',
+    filter_column: 'contractor_id',
+  },
+  guild: {
+    relation_type: 'one_to_many',
+    filter_column: 'guild_id',
+  },
+  covenant: {
+    relation_type: 'one_to_many',
+    filter_column: 'covenants_id',
+  },
+  category: {
+    relation_type: 'one_to_many',
+    filter_column: 'category_id',
+  },
+  province: {
+    relation_type: 'one_to_many',
+    filter_column: 'province',
+  },
+  city: {
+    relation_type: 'one_to_many',
+    filter_column: 'city',
+  },
+  hierarchical_position: {
+    relation_type: 'one_to_many',
+    filter_column: 'hierarchical_position',
+  },
+  workflow_diagram: {
+    relation_type: 'one_to_many',
+    filter_column: 'workflow_diagram',
+  },
+  birthplace: {
+    relation_type: 'one_to_many',
+    filter_column: 'birthplace',
+  },
+};
 
 const defaultValues = [
   {
@@ -148,10 +194,10 @@ export default function NewDocumentType({
       result = value !== undefined && value !== null ? String(value).trim() : '';
     }
 
-    console.log('[getEmployeePropertyValue]', { accessor_key, value, result });
     return result;
   }
 
+  console.log(employees, 'employees');
   // Este useEffect se ha fusionado con el principal para reducir la cantidad total
 
   const [conditions, setConditions] = useState<Condition[]>([]);
@@ -203,8 +249,6 @@ export default function NewDocumentType({
     // Si no hay condiciones, mostrar todos los empleados
     if (!condiciones.length) return empleados;
 
-    console.log('[Filtro] condiciones:', condiciones);
-
     return empleados.filter((employee) => {
       // El empleado debe cumplir TODAS las condiciones (AND entre condiciones)
       const cumple = condiciones.every((condition) => {
@@ -228,15 +272,6 @@ export default function NewDocumentType({
                 normalizeString(contrato.customers.name) === normalizeString(clienteSeleccionado)
             );
           });
-
-          if (tieneAlgunClienteSeleccionado) {
-            console.log('[Filtro] MATCH CLIENTE', {
-              employee: employee.firstname,
-              clientes: contractorEmployees.map((c: any) => c.customers?.name),
-              buscados: condition.values,
-            });
-          }
-
           return tieneAlgunClienteSeleccionado;
         }
 
@@ -247,27 +282,11 @@ export default function NewDocumentType({
         const resultado = condition.values.some((v: string) => {
           // Usar normalizeString para una comparación más robusta
           const match = normalizeString(employeeValue) === normalizeString(v);
-          if (match) {
-            console.log('[Filtro] MATCH', { employee, property: condition.property, employeeValue, comparado: v });
-          }
           return match;
         });
 
-        if (!resultado) {
-          console.log('[Filtro] NO MATCH', {
-            employee,
-            property: condition.property,
-            employeeValue,
-            valores: condition.values,
-          });
-        }
-
         return resultado;
       });
-
-      if (cumple) {
-        console.log('[Filtro] EMPLEADO INCLUÍDO', employee);
-      }
 
       return cumple;
     });
@@ -278,7 +297,6 @@ export default function NewDocumentType({
     // Solo aplicar filtros si ya se han cargado empleados
     if (employees.length > 0) {
       const filtered = filterEmployeesByConditions(employees, conditions, employeePropertiesConfig);
-      console.log('[Filtro] empleados filtrados:', filtered);
       setMatchingEmployees(filtered);
     }
   }, [conditions, employees, employeePropertiesConfig]);
@@ -302,11 +320,7 @@ export default function NewDocumentType({
     mandatory: isOptional ? z.boolean().optional() : z.boolean({ required_error: 'Se debe seleccionar una opcion' }),
     explired: z.boolean({ required_error: 'Se debe seleccionar una opcion' }),
     special: isOptional ? z.boolean().optional() : z.boolean({ required_error: 'Este campo es requerido' }),
-    description: isOptional
-      ? z.string().optional()
-      : special
-        ? z.string({ required_error: 'Este campo es requerido' })
-        : z.string().optional(),
+    description: z.string().optional(),
     is_it_montlhy: z.boolean({ required_error: 'Este campo es requerido' }),
     private: z.boolean({ required_error: 'Este campo es requerido' }),
     down_document: z.boolean({ required_error: 'Este campo es requerido' }),
@@ -316,10 +330,13 @@ export default function NewDocumentType({
     resolver: zodResolver(FormSchema),
     defaultValues: {
       name: '',
-      multiresource: undefined,
-      mandatory: undefined,
-      explired: undefined,
-      special: undefined,
+      multiresource: false,
+      mandatory: false,
+      explired: false,
+      special: false,
+      down_document: false,
+      private: false,
+      is_it_montlhy: false,
       applies: selectOptions === 'all' ? undefined : (selectOptions as 'Empresa' | 'Persona' | 'Equipos' | undefined),
     },
   });
@@ -330,7 +347,86 @@ export default function NewDocumentType({
     }
   }, [selectOptions]);
 
+  /**
+   * Prepara las condiciones para almacenar en la base de datos
+   * Convierte el estado de conditions a un formato serializable
+   * e identifica propiedades que son relaciones
+   */
+  function prepareConditionsForStorage() {
+    // Ignorar condiciones vacías
+    const validConditions = conditions.filter((c) => c.property && c.values && c.values.length > 0);
+
+    if (validConditions.length === 0) {
+      return null;
+    }
+
+    return validConditions
+      .map((condition) => {
+        // Encuentra la configuración de esta propiedad
+        const propConfig = employeePropertiesConfig.find((p) => p.label === condition.property);
+        if (!propConfig) return null;
+
+        // Determina si es una relación (propiedades que son objetos o arrays)
+        const isRelation = [
+          'contractor_employee',
+          'province',
+          'hierarchical_position',
+          'category',
+          'guild',
+          'covenant',
+          'city',
+        ].includes(propConfig.accessor_key);
+
+        // Tipo especial para contractor_employee (array de relaciones)
+        const relationsColumns = ['contractor_employee'];
+        const isArrayRelation = relationsColumns.includes(propConfig.accessor_key);
+
+        let reference_values: { id: string; value: string }[] = [];
+        if (isRelation) {
+          // Buscar FIRST employee que contenga el valor para obtener su ID (si está presente)
+          reference_values = condition.values.map((value) => {
+            const emp = employees.find((e) => {
+              const empVal = getEmployeePropertyValue(e, propConfig.accessor_key);
+              return empVal?.toLowerCase() === value.toLowerCase();
+            });
+            // Para relaciones 1:N el objeto suele estar directamente en la propiedad
+            const relatedObj = (emp ? (emp[propConfig.accessor_key as keyof EmployeeDetailed] as any) : null) as any;
+            const relatedId = relatedObj?.id ?? relatedObj ?? '';
+            console.log(relatedId, 'relatedId');
+            return {
+              id: relatedId[0]?.customers?.id ? relatedId[0].customers.id : relatedId,
+              value,
+            };
+          });
+        }
+
+        // Añadir metadatos de relación para uso en BD
+        const meta = relationMeta[propConfig.accessor_key] || null;
+
+        console.log(reference_values, 'reference_values');
+
+        return {
+          property_key: propConfig.accessor_key,
+          values: condition.values,
+          reference_values: reference_values,
+          ids: reference_values.length ? reference_values.map((r) => r.id) : condition.values, // Para direct, usar los valores mismos
+          is_relation: isRelation,
+          is_array_relation: isArrayRelation,
+          relation_type: meta ? meta.relation_type : 'direct',
+          relation_table: meta?.relation_table || null,
+          column_on_employees: meta?.column_on_employees || null,
+          column_on_relation: meta?.column_on_relation || null,
+          filter_column: meta?.filter_column || propConfig.accessor_key,
+          property_label: condition.property,
+        };
+      })
+      .filter(Boolean); // Eliminar nulls
+  }
+
   async function onSubmit(values: z.infer<typeof FormSchema>) {
+    // Convertir las condiciones a formato serializable
+    const serializedConditions = prepareConditionsForStorage();
+
     const formattedValues = {
       ...values,
       name: formatName(values.name),
@@ -341,38 +437,42 @@ export default function NewDocumentType({
       special: isOptional ? false : values.special,
       down_document: isOptional ? false : values.down_document,
       private: values.private,
+      // Añadir las condiciones serializadas
+      conditions: serializedConditions ? serializedConditions : null,
     };
 
     console.log('formattedValues', formattedValues);
 
-    // toast.promise(
-    //   async () => {
-    //     const { data, error } = await supabase.from('document_types').insert(formattedValues).select();
+    toast.promise(
+      async () => {
+        const { data, error } = await supabase.from('document_types').insert(formattedValues).select();
 
-    //     if (error) {
-    //       throw new Error(handleSupabaseError(error.message));
-    //     }
-    //   },
-    //   {
-    //     loading: 'Creando documento...',
-    //     success: (data) => {
-    //       fetchDocumentTypes(useLoggedUserStore.getState().actualCompany?.id || '');
-    //       fetchDocuments();
-    //       router.refresh();
-    //       if (codeControlClient) {
-    //         document.getElementById('close_document_modal')?.click();
-    //         return 'El documento se ha creado correctamente';
-    //       } else {
-    //         router.push('/auditor');
-    //         return 'El documento se ha creado correctamente';
-    //       }
-    //     },
-    //     error: (error) => {
-    //       return error;
-    //     },
-    //   }
-    // );
+        if (error) {
+          throw new Error(handleSupabaseError(error.message));
+        }
+      },
+      {
+        loading: 'Creando documento...',
+        success: (data) => {
+          fetchDocumentTypes(useLoggedUserStore.getState().actualCompany?.id || '');
+          fetchDocuments();
+          router.refresh();
+          if (codeControlClient) {
+            document.getElementById('close_document_modal')?.click();
+            return 'El documento se ha creado correctamente';
+          } else {
+            router.push('/auditor');
+            return 'El documento se ha creado correctamente';
+          }
+        },
+        error: (error) => {
+          return error;
+        },
+      }
+    );
   }
+
+  console.log(form.formState.errors, 'error');
 
   function formatName(name: string): string {
     // Capitalize first letter and convert the rest to lowercase
@@ -493,7 +593,7 @@ export default function NewDocumentType({
               if (!form.getValues('applies')) return;
               return (
                 <FormField
-                  key={item.id}
+                  key={crypto.randomUUID()}
                   control={form.control}
                   name={item.id as 'name' | 'applies' | 'multiresource' | 'mandatory' | 'explired' | 'special'}
                   render={({ field }) => (
@@ -665,7 +765,7 @@ export default function NewDocumentType({
             ) : (
               <div className="space-y-3">
                 {conditions.map((condition) => (
-                  <Card key={condition.id}>
+                  <Card key={crypto.randomUUID()}>
                     <CardContent className="p-3">
                       <div className="flex items-center gap-2">
                         <Select
@@ -677,7 +777,7 @@ export default function NewDocumentType({
                           </SelectTrigger>
                           <SelectContent>
                             {employeePropertiesConfig.map((prop) => (
-                              <SelectItem key={prop.accessor_key} value={prop.label}>
+                              <SelectItem key={crypto.randomUUID()} value={prop.label}>
                                 {prop.label}
                               </SelectItem>
                             ))}
@@ -717,11 +817,11 @@ export default function NewDocumentType({
                 {conditions.length > 0 && (
                   <div className="flex flex-wrap gap-1 mt-2">
                     <span className="text-sm font-medium">Resumen:</span>
-                    {conditions.map((condition, index) => {
+                    {conditions.map((condition) => {
                       const propertyLabel = condition.property;
 
                       return condition.property && condition.values.length ? (
-                        <Badge key={condition.id} variant="outline" className="text-xs">
+                        <Badge key={crypto.randomUUID()} variant="outline" className="text-xs">
                           {propertyLabel}: {condition.values.join(', ')}
                         </Badge>
                       ) : null;
@@ -747,10 +847,9 @@ export default function NewDocumentType({
                         <div className="space-y-2">
                           {/* Renderizado de empleados que cumplen con las condiciones */}
                           {matchingEmployees.map((employee) => {
-                            console.log('[RENDER] matchingEmployees:', matchingEmployees);
                             return (
                               <div
-                                key={employee.id}
+                                key={crypto.randomUUID()}
                                 className="flex items-center gap-2 p-2 hover:bg-slate-100 rounded-md"
                               >
                                 <Avatar>
@@ -776,19 +875,10 @@ export default function NewDocumentType({
                                         const badges = condition.values
                                           .filter((v) => employeeValue.toLowerCase() === v.toLowerCase())
                                           .map((v) => (
-                                            <Badge key={condition.property + v} variant="outline" className="text-xs">
+                                            <Badge key={crypto.randomUUID()} variant="outline" className="text-xs">
                                               {condition.property}: {v}
                                             </Badge>
                                           ));
-                                        if (badges.length > 0) {
-                                          console.log('[BADGES]', {
-                                            employee,
-                                            property: condition.property,
-                                            employeeValue,
-                                            conditionValues: condition.values,
-                                            badgesMostrados: badges.map((b) => b.key),
-                                          });
-                                        }
                                         return badges;
                                       })}
                                   </div>
