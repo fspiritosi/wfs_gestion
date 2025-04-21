@@ -40,6 +40,9 @@ import { z } from 'zod';
 import { supabase } from '../../supabase/supabase';
 import BackButton from './BackButton';
 
+import { employeeMatchesConditions } from '@/app/dashboard/employee/conditionUtils';
+import { fetchAllEmployeesWithRelationsById } from '@/app/server/GET/actions';
+import moment from 'moment';
 import AddCategoryModal from './AddCategoryModal';
 import AddCovenantModal from './AddCovenantModal';
 import AddGuildModal from './AddGuildModal';
@@ -53,7 +56,6 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from './ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import moment from 'moment';
 
 type Province = {
   id: number;
@@ -108,9 +110,11 @@ export default function EmployeeComponent({
   activeEmploees,
   historyData,
   role,
+  documentsTypes,
 }: {
   historyData: any;
   role: string | null;
+  documentsTypes: DocumentTypes[];
   user: any;
   activeEmploees: any;
   diagrams: EmployeeDiagramWithDiagramType[];
@@ -162,7 +166,6 @@ export default function EmployeeComponent({
   const getEmployees = useLoggedUserStore((state: any) => state.getEmployees);
   const router = useRouter();
   const url = process.env.NEXT_PUBLIC_PROJECT_URL;
-  const mandatoryDocuments = useCountriesStore((state) => state.mandatoryDocuments);
 
   const form = useForm<z.infer<typeof accordionSchema>>({
     resolver: zodResolver(accordionSchema),
@@ -485,10 +488,7 @@ export default function EmployeeComponent({
             values.date_of_admission instanceof Date
               ? values.date_of_admission.toISOString()
               : values.date_of_admission,
-          born_date:
-            values.born_date instanceof Date
-              ? values.born_date.toISOString()
-              : values.born_date,
+          born_date: values.born_date instanceof Date ? values.born_date.toISOString() : values.born_date,
           province: String(provincesOptions.find((e) => e.name.trim() === values.province)?.id),
           birthplace: String(countryOptions.find((e) => e.name === values.birthplace)?.id),
           city: String(citysOptions.find((e) => e.name.trim() === values.city)?.id),
@@ -504,20 +504,40 @@ export default function EmployeeComponent({
         try {
           const applies = await createEmployee(finalValues);
           const documentsMissing: {
-            applies: number;
+            applies: string;
             id_document_types: string;
             validity: string | null;
             user_id: string | undefined;
           }[] = [];
 
-          mandatoryDocuments?.Persona?.forEach(async (document) => {
-            documentsMissing.push({
-              applies: applies[0].id,
-              id_document_types: document.id,
-              validity: null,
-              user_id: loggedUser,
+          documentsTypes
+            ?.filter((document) => !document.special)
+            .forEach(async (document) => {
+              documentsMissing.push({
+                applies: applies[0].id,
+                id_document_types: document.id,
+                validity: null,
+                user_id: loggedUser,
+              });
             });
-          });
+
+          const created = await fetchAllEmployeesWithRelationsById(applies[0].id);
+
+          // 3) documentos especiales que SÍ cumple
+          const specialToAdd = documentsTypes?.filter(
+            (d) => d.special && employeeMatchesConditions(created[0], d.conditions)
+          );
+
+          if (specialToAdd) {
+            specialToAdd?.forEach((d) => {
+              documentsMissing.push({
+                applies: created[0].id,
+                id_document_types: d.id,
+                validity: null,
+                user_id: loggedUser,
+              });
+            });
+          }
 
           const { data, error } = await supabase.from('documents_employees').insert(documentsMissing).select();
 
@@ -581,10 +601,7 @@ export default function EmployeeComponent({
             values.date_of_admission instanceof Date
               ? values.date_of_admission.toISOString()
               : values.date_of_admission,
-          born_date:
-            values.born_date instanceof Date
-              ? values.born_date.toISOString()
-              : values.born_date,
+          born_date: values.born_date instanceof Date ? values.born_date.toISOString() : values.born_date,
           province: String(provincesOptions.find((e) => e.name.trim() === values.province)?.id),
           birthplace: String(countryOptions.find((e) => e.name === values.birthplace)?.id),
           city: String(citysOptions.find((e) => e.name.trim() === values.city)?.id),
