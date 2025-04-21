@@ -5,7 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
-import { fetchAllEmployeesWithRelations } from '@/app/server/GET/actions';
+import { fetchAllEmployeesWithRelations, fetchAllEquipmentWithRelations } from '@/app/server/GET/actions';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
@@ -16,7 +16,7 @@ import { cn } from '@/lib/utils';
 import { useCountriesStore } from '@/store/countries';
 import { useLoggedUserStore } from '@/store/loggedUser';
 import { InfoCircledIcon } from '@radix-ui/react-icons';
-import { PlusCircle, Users, X } from 'lucide-react';
+import { PlusCircle, Truck, Users, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
@@ -52,6 +52,15 @@ const baseEmployeePropertiesConfig = [
 
   // Array de objetos anidados
   { label: 'Clientes', accessor_key: 'contractor_employee' }, // Array de objetos donde cada uno tiene customers.name
+];
+
+// Configuración base de propiedades disponibles para filtrar vehículos
+const baseVehiclePropertiesConfig = [
+  { label: 'Marca', accessor_key: 'brand' },
+  { label: 'Modelo', accessor_key: 'model' },
+  { label: 'Tipo', accessor_key: 'type' },
+  { label: 'Categoría Vehículo', accessor_key: 'types_of_vehicles' },
+  { label: 'Cliente', accessor_key: 'contractor_equipment' },
 ];
 
 //  Mapeo entre accessor_key y metadatos de relación para futura construcción de SQL
@@ -94,6 +103,30 @@ const relationMeta: Record<string, any> = {
   birthplace: {
     relation_type: 'one_to_many',
     filter_column: 'birthplace',
+  },
+  //EQUIPOS
+  contractor_equipment: {
+    relation_type: 'many_to_many',
+    relation_table: 'contractor_equipment',
+    column_on_vehicles: 'id', // este es el id de vehicles
+    column_on_relation: 'equipment_id', // este es el campo en contractor_equipment que apunta a vehicles
+    filter_column: 'contractor_id', // este es el campo en contractor_equipment que apunta al cliente
+  },
+  type: {
+    relation_type: 'one_to_many',
+    filter_column: 'type',
+  },
+  brand: {
+    relation_type: 'one_to_many',
+    filter_column: 'brand',
+  },
+  model: {
+    relation_type: 'one_to_many',
+    filter_column: 'model',
+  },
+  types_of_vehicles: {
+    relation_type: 'one_to_many',
+    filter_column: 'types_of_vehicles',
   },
 };
 
@@ -149,10 +182,14 @@ export default function NewDocumentType({
   const fetchDocuments = useLoggedUserStore((state) => state.documetsFetch);
   const [items, setItems] = useState(defaultValues);
   const [employees, setEmployees] = useState<EmployeeDetailed[]>([]);
+  const [vehicles, setVehicles] = useState<VehicleWithBrand[]>([]);
 
   // Estado para mantener las propiedades con sus valores dinámicos
   const [employeePropertiesConfig, setEmployeePropertiesConfig] = useState(
     baseEmployeePropertiesConfig.map((prop) => ({ ...prop, values: [] as string[] }))
+  );
+  const [vehiclePropertiesConfig, setVehiclePropertiesConfig] = useState(
+    baseVehiclePropertiesConfig.map((prop) => ({ ...prop, values: [] as string[] }))
   );
 
   // Para normalizar strings en comparaciones (minúsculas, sin acentos, sin espacios extra)
@@ -197,6 +234,25 @@ export default function NewDocumentType({
     return result;
   }
 
+  // Devuelve el valor de la propiedad del vehículo
+  function getVehiclePropertyValue(vehicle: any, accessor_key: string): string {
+    const parts = accessor_key.split('.');
+    let value = parts.reduce((acc, key) => (acc ? acc[key] : undefined), vehicle);
+    let result = '';
+
+    if (accessor_key === 'contractor_equipment' && Array.isArray(vehicle.contractor_equipment)) {
+      const names = vehicle.contractor_equipment.map((r: any) => r.contractor_id?.name).filter(Boolean);
+      return names.join(',');
+    }
+
+    if (value && typeof value === 'object' && 'name' in value) {
+      result = String(value.name).trim();
+    } else {
+      result = value != null ? String(value).trim() : '';
+    }
+    return result;
+  }
+
   console.log(employees, 'employees');
   // Este useEffect se ha fusionado con el principal para reducir la cantidad total
 
@@ -212,6 +268,10 @@ export default function NewDocumentType({
       try {
         // Obtener empleados de la API
         const empleadosCargados = await fetchAllEmployeesWithRelations();
+        const equiposCargados = await fetchAllEquipmentWithRelations();
+
+        console.log(equiposCargados, 'equiposCargados');
+
         if (!isMounted) return;
 
         // Establecer empleados
@@ -236,7 +296,21 @@ export default function NewDocumentType({
       }
     };
 
+    // 1.5. Cargar vehículos (solo una vez al montar el componente)
+    const fetchAndSetupVehicles = async () => {
+      const equipos = await fetchAllEquipmentWithRelations();
+      if (!isMounted) return;
+      setVehicles(equipos);
+      const updated = baseVehiclePropertiesConfig.map((prop) => {
+        const vals = equipos.map((v) => getVehiclePropertyValue(v, prop.accessor_key)).filter((v) => v);
+        return { ...prop, values: Array.from(new Set(vals)) };
+      });
+      setVehiclePropertiesConfig(updated);
+      setMatchingVehicles(equipos);
+    };
+
     fetchAndSetupEmployees();
+    fetchAndSetupVehicles();
 
     // Limpieza al desmontar
     return () => {
@@ -292,6 +366,20 @@ export default function NewDocumentType({
     });
   }
 
+  // 2.5. Función que filtra vehículos según las condiciones
+  function filterVehiclesByConditions(vehs: any[], condiciones: Condition[], propConfig: any[]) {
+    if (!condiciones.length) return vehs;
+    return vehs.filter((v) =>
+      condiciones.every((c) => {
+        if (!c.property || !c.values.length) return true;
+        const cfg = propConfig.find((p) => p.label === c.property);
+        if (!cfg) return true;
+        const val = getVehiclePropertyValue(v, cfg.accessor_key);
+        return c.values.some((x) => normalizeString(val) === normalizeString(x));
+      })
+    );
+  }
+
   // 3. Aplicar filtros cuando cambien las condiciones
   useEffect(() => {
     // Solo aplicar filtros si ya se han cargado empleados
@@ -299,7 +387,10 @@ export default function NewDocumentType({
       const filtered = filterEmployeesByConditions(employees, conditions, employeePropertiesConfig);
       setMatchingEmployees(filtered);
     }
-  }, [conditions, employees, employeePropertiesConfig]);
+    if (vehicles.length > 0) {
+      setMatchingVehicles(filterVehiclesByConditions(vehicles, conditions, vehiclePropertiesConfig));
+    }
+  }, [conditions, employees, employeePropertiesConfig, vehicles, vehiclePropertiesConfig]);
 
   const selectOptions = optionChildrenProp === 'all' ? 'Personas, Equipos o Empresa' : optionChildrenProp;
 
@@ -423,9 +514,72 @@ export default function NewDocumentType({
       .filter(Boolean); // Eliminar nulls
   }
 
+  // Serializar condiciones de vehículos para almacenamiento
+  function prepareVehicleConditionsForStorage() {
+    const validConditions = conditions.filter((c) => c.property && c.values.length);
+    if (validConditions.length === 0) {
+      return null;
+    }
+
+    // Definir relaciones (igual que en empleados)
+    const relationKeys = ['contractor_equipment', 'brand', 'model', 'type', 'types_of_vehicles'];
+    const arrayRelationKeys = ['contractor_equipment'];
+
+    return validConditions
+      .map((condition) => {
+        const propConfig = vehiclePropertiesConfig.find((p) => p.label === condition.property);
+        if (!propConfig) return null;
+
+        const isRelation = relationKeys.includes(propConfig.accessor_key);
+        const isArrayRelation = arrayRelationKeys.includes(propConfig.accessor_key);
+
+        let reference_values: { id: string; value: string }[] = [];
+        if (isRelation) {
+          reference_values = condition.values.map((value) => {
+            const veh = vehicles.find((v) => {
+              const vehVal = getVehiclePropertyValue(v, propConfig.accessor_key);
+              return vehVal?.toLowerCase() === value.toLowerCase();
+            }) as any;
+            // Para contractor_equipment es array, para otros puede ser objeto
+            if (isArrayRelation && veh && Array.isArray(veh.contractor_equipment)) {
+              // Busca el contractor_id correspondiente al valor
+              const contractor = veh.contractor_equipment.find(
+                (r: any) => r.contractor_id?.name?.toLowerCase() === value.toLowerCase()
+              );
+              return { id: contractor?.contractor_id?.id || '', value };
+            } else if (veh && propConfig.accessor_key.includes('.')) {
+              // Para relaciones 1:N anidadas (ej: brand.name)
+              const [main, sub] = propConfig.accessor_key.split('.');
+              return { id: veh[main as any]?.id || '', value };
+            } else if (veh && veh[propConfig.accessor_key]) {
+              return { id: veh[propConfig.accessor_key]?.id || '', value };
+            }
+            return { id: '', value };
+          });
+        }
+
+        const meta = relationMeta[propConfig.accessor_key] || null;
+
+        return {
+          property_key: propConfig.accessor_key,
+          values: condition.values,
+          ids: reference_values.length ? reference_values.map((r) => r.id) : condition.values,
+          is_relation: !!meta,
+          is_array_relation: isArrayRelation,
+          relation_type: meta?.relation_type || 'direct',
+          relation_table: meta?.relation_table || null,
+          column_on_vehicles: meta?.column_on_vehicles || null,
+          column_on_relation: meta?.column_on_relation || null,
+          filter_column: meta?.filter_column || propConfig.accessor_key,
+        };
+      })
+      .filter(Boolean);
+  }
+
   async function onSubmit(values: z.infer<typeof FormSchema>) {
     // Convertir las condiciones a formato serializable
-    const serializedConditions = prepareConditionsForStorage();
+    const serializedConditions =
+      form.getValues('applies') === 'Equipos' ? prepareVehicleConditionsForStorage() : prepareConditionsForStorage();
 
     const formattedValues = {
       ...values,
@@ -490,13 +644,14 @@ export default function NewDocumentType({
   const [down, setDown] = useState(false);
 
   const [matchingEmployees, setMatchingEmployees] = useState<EmployeeDetailed[]>([]);
+  const [matchingVehicles, setMatchingVehicles] = useState<VehicleWithBrand[]>([]);
+  const [showEmployeePreview, setShowEmployeePreview] = useState(false);
+  const [showVehiclePreview, setShowVehiclePreview] = useState(false);
 
   // Actualiza los valores de una condición existente
   const updateConditionValues = (id: string, values: string[]) => {
     setConditions((prev) => prev.map((condition) => (condition.id === id ? { ...condition, values } : condition)));
   };
-
-  const [showEmployeePreview, setShowEmployeePreview] = useState(false);
 
   // Elimina una condición por su ID
   const removeCondition = (id: string) => {
@@ -560,6 +715,9 @@ export default function NewDocumentType({
                     } else {
                       setItems(defaultValues);
                     }
+
+                    setShowEmployeePreview(false);
+                    setShowVehiclePreview(false);
 
                     field.onChange(value);
                   }}
@@ -738,15 +896,28 @@ export default function NewDocumentType({
             <div className="flex justify-between flex-col items-center mb-4">
               <h3 className="font-semibold text-lg mb-2">Condiciones Especiales</h3>
               <div className="flex justify-around w-full">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  type="button"
-                  onClick={() => setShowEmployeePreview(!showEmployeePreview)}
-                >
-                  <Users className="h-4 w-4 mr-1" />
-                  {showEmployeePreview ? 'Ocultar' : 'Ver'} Empleados ({matchingEmployees.length})
-                </Button>
+                {form.getValues('applies') === 'Persona' && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    type="button"
+                    onClick={() => setShowEmployeePreview(!showEmployeePreview)}
+                  >
+                    <Users className="h-4 w-4 mr-1" />
+                    {showEmployeePreview ? 'Ocultar' : 'Ver'} Empleados ({matchingEmployees.length})
+                  </Button>
+                )}
+                {form.getValues('applies') === 'Equipos' && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    type="button"
+                    onClick={() => setShowVehiclePreview(!showVehiclePreview)}
+                  >
+                    <Truck className="h-4 w-4 mr-1" />
+                    {showVehiclePreview ? 'Ocultar' : 'Ver'} Equipos ({matchingVehicles.length})
+                  </Button>
+                )}
                 <Button variant="outline" size="sm" type="button" onClick={addCondition}>
                   <PlusCircle className="h-4 w-4 mr-1" />
                   Añadir Condición
@@ -776,22 +947,35 @@ export default function NewDocumentType({
                             <SelectValue placeholder="Seleccionar propiedad" />
                           </SelectTrigger>
                           <SelectContent>
-                            {employeePropertiesConfig.map((prop) => (
-                              <SelectItem key={crypto.randomUUID()} value={prop.label}>
-                                {prop.label}
-                              </SelectItem>
-                            ))}
+                            {form.getValues('applies') === 'Equipos'
+                              ? vehiclePropertiesConfig.map((prop) => (
+                                  <SelectItem key={crypto.randomUUID()} value={prop.label}>
+                                    {prop.label}
+                                  </SelectItem>
+                                ))
+                              : employeePropertiesConfig.map((prop) => (
+                                  <SelectItem key={crypto.randomUUID()} value={prop.label}>
+                                    {prop.label}
+                                  </SelectItem>
+                                ))}
                           </SelectContent>
                         </Select>
                         {condition.property && (
                           <MultiSelect
                             options={
-                              employeePropertiesConfig
-                                .find((prop) => prop.label === condition.property)
-                                ?.values.map((value: string) => ({
-                                  label: value,
-                                  value: value,
-                                })) || []
+                              form.getValues('applies') === 'Equipos'
+                                ? vehiclePropertiesConfig
+                                    .find((prop) => prop.label === condition.property)
+                                    ?.values.map((value: string) => ({
+                                      label: value,
+                                      value: value,
+                                    })) || []
+                                : employeePropertiesConfig
+                                    .find((prop) => prop.label === condition.property)
+                                    ?.values.map((value: string) => ({
+                                      label: value,
+                                      value: value,
+                                    })) || []
                             }
                             selectedValues={condition.values}
                             setSelectedValues={(values: string[]) => updateConditionValues(condition.id, values)}
@@ -831,68 +1015,95 @@ export default function NewDocumentType({
               </div>
             )}
 
-            {showEmployeePreview && (
+            {(showEmployeePreview && form.getValues('applies') === 'Persona') ||
+            (showVehiclePreview && form.getValues('applies') === 'Equipos') ? (
               <Accordion type="single" collapsible className="mt-4">
                 <AccordionItem value="employees">
                   <AccordionTrigger>
-                    Empleados que cumplen las condiciones ({matchingEmployees.length})
+                    {form.getValues('applies') === 'Persona'
+                      ? `Empleados que cumplen las condiciones (${matchingEmployees.length})`
+                      : `Equipos que cumplen las condiciones (${matchingVehicles.length})`}
                   </AccordionTrigger>
                   <AccordionContent>
                     <ScrollArea className="h-[200px] rounded-md border p-2">
-                      {matchingEmployees.length === 0 ? (
+                      {(form.getValues('applies') === 'Persona' && matchingEmployees.length === 0) ||
+                      (form.getValues('applies') === 'Equipos' && matchingVehicles.length === 0) ? (
                         <div className="text-center py-8 text-muted-foreground">
-                          No hay empleados que cumplan todas las condiciones seleccionadas
+                          No hay {form.getValues('applies') === 'Persona' ? 'empleados' : 'equipos'} que cumplan todas
+                          las condiciones seleccionadas
                         </div>
                       ) : (
                         <div className="space-y-2">
                           {/* Renderizado de empleados que cumplen con las condiciones */}
-                          {matchingEmployees.map((employee) => {
-                            return (
-                              <div
-                                key={crypto.randomUUID()}
-                                className="flex items-center gap-2 p-2 hover:bg-slate-100 rounded-md"
-                              >
-                                <Avatar>
-                                  <AvatarImage src={employee.picture || '/placeholder.svg'} alt={employee.firstname} />
-                                  <AvatarFallback>{employee.firstname.substring(0, 2)}</AvatarFallback>
-                                </Avatar>
-                                <div>
-                                  <p className="font-medium">
-                                    {employee.firstname} {employee.lastname}
-                                  </p>
-                                  <div className="flex gap-1 flex-wrap">
-                                    {conditions
-                                      .filter((condition) => condition.property && condition.values.length)
-                                      .flatMap((condition) => {
-                                        const propertyConfig = employeePropertiesConfig.find(
-                                          (config) => config.label === condition.property
-                                        );
-                                        if (!propertyConfig) return [];
-                                        const employeeValue = getEmployeePropertyValue(
-                                          employee,
-                                          propertyConfig.accessor_key
-                                        );
-                                        const badges = condition.values
-                                          .filter((v) => employeeValue.toLowerCase() === v.toLowerCase())
-                                          .map((v) => (
-                                            <Badge key={crypto.randomUUID()} variant="outline" className="text-xs">
-                                              {condition.property}: {v}
-                                            </Badge>
-                                          ));
-                                        return badges;
-                                      })}
+                          {(form.getValues('applies') === 'Persona' ? matchingEmployees : matchingVehicles).map(
+                            (employee: any) => {
+                              return (
+                                <div
+                                  key={crypto.randomUUID()}
+                                  className="flex items-center gap-2 p-2 hover:bg-slate-100 rounded-md"
+                                >
+                                  {form.getValues('applies') === 'Persona' ? (
+                                    <Avatar>
+                                      <AvatarImage
+                                        src={employee.picture || '/placeholder.svg'}
+                                        alt={employee.firstname}
+                                      />
+                                      <AvatarFallback>{employee.firstname.substring(0, 2)}</AvatarFallback>
+                                    </Avatar>
+                                  ) : (
+                                    <Avatar>
+                                      <AvatarImage
+                                        src={employee.picture || '/placeholder.svg'}
+                                        alt={employee.brand.name}
+                                      />
+                                      <AvatarFallback>{employee.brand.name.substring(0, 2)}</AvatarFallback>
+                                    </Avatar>
+                                  )}
+                                  <div>
+                                    <p className="font-medium">
+                                      {form.getValues('applies') === 'Persona'
+                                        ? `${employee.firstname} ${employee.lastname}`
+                                        : `${employee.brand.name} ${employee.model.name}`}
+                                    </p>
+                                    <div className="flex gap-1 flex-wrap">
+                                      {conditions
+                                        .filter((condition) => condition.property && condition.values.length)
+                                        .flatMap((condition) => {
+                                          const propertyConfig =
+                                            form.getValues('applies') === 'Persona'
+                                              ? employeePropertiesConfig.find(
+                                                  (config) => config.label === condition.property
+                                                )
+                                              : vehiclePropertiesConfig.find(
+                                                  (config) => config.label === condition.property
+                                                );
+                                          if (!propertyConfig) return [];
+                                          const employeeValue =
+                                            form.getValues('applies') === 'Persona'
+                                              ? getEmployeePropertyValue(employee, propertyConfig.accessor_key)
+                                              : getVehiclePropertyValue(employee, propertyConfig.accessor_key);
+                                          const badges = condition.values
+                                            .filter((v) => employeeValue.toLowerCase() === v.toLowerCase())
+                                            .map((v) => (
+                                              <Badge key={crypto.randomUUID()} variant="outline" className="text-xs">
+                                                {condition.property}: {v}
+                                              </Badge>
+                                            ));
+                                          return badges;
+                                        })}
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                            );
-                          })}
+                              );
+                            }
+                          )}
                         </div>
                       )}
                     </ScrollArea>
                   </AccordionContent>
                 </AccordionItem>
               </Accordion>
-            )}
+            ) : null}
           </div>
         )}
         <Button type="submit" id="create_new_document" className={cn(codeControlClient ? 'hidden' : '')}>

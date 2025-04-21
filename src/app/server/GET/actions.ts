@@ -125,6 +125,24 @@ export const fetchAllEmployees = async (role?: string) => {
   }
   return data;
 };
+export const fetchAllEquipmentWithRelations = async () => {
+  const cookiesStore = cookies();
+  const supabase = supabaseServer();
+  const company_id = cookiesStore.get('actualComp')?.value;
+  if (!company_id) return [];
+
+  const { data, error } = await supabase
+    .from('vehicles')
+    .select('*,brand(*),model(*),type(*),types_of_vehicles(*),contractor_equipment(*,contractor_id(*))')
+    .eq('company_id', company_id || '')
+    .returns<VehicleWithBrand[]>();
+
+  if (error) {
+    console.error('Error fetching vehicles:', error);
+    return [];
+  }
+  return data;
+};
 // Employee-related actions
 export const fetchAllEmployeesWithRelations = async () => {
   const cookiesStore = cookies();
@@ -166,6 +184,7 @@ export const fetchAllEmployeesWithRelations = async () => {
   }
   return data ?? [];
 };
+
 export const fetchAllActivesEmployees = async () => {
   const cookiesStore = cookies();
   const supabase = supabaseServer();
@@ -533,7 +552,7 @@ export const fetchAllEquipment = async (company_equipment_id?: string) => {
 
   const { data, error } = await supabase
     .from('vehicles')
-    .select('*,brand(*),model(*),type(*),types_of_vehicles(*),contractor_equipment(*,contractor_id(*))')
+    .select('*,brand(*),model(*),type(*),types_of_vehicles(*),contractor_equipment(customers(*))')
     .eq('company_id', (company_id ?? company_equipment_id) || '')
     .returns<VehicleWithBrand[]>();
 
