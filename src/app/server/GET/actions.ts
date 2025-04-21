@@ -302,6 +302,25 @@ export const fetchAllEquipmentWithRelations = async () => {
   }
   return data;
 };
+export const fetchAllEquipmentWithRelationsById = async (id: string) => {
+  const cookiesStore = cookies();
+  const supabase = supabaseServer();
+  const company_id = cookiesStore.get('actualComp')?.value;
+  if (!company_id) return [];
+
+  const { data, error } = await supabase
+    .from('vehicles')
+    .select('*,brand(*),model(*),type(*),types_of_vehicles(*),contractor_equipment(*,contractor_id(*))')
+    .eq('company_id', company_id || '')
+    .eq('id', id)
+    .returns<VehicleWithBrand[]>();
+
+  if (error) {
+    console.error('Error fetching vehicles:', error);
+    return [];
+  }
+  return data;
+};
 // Employee-related actions
 export const fetchAllEmployeesWithRelations = async () => {
   const cookiesStore = cookies();

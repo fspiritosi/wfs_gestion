@@ -528,7 +528,7 @@ export default function EmployeeComponent({
             (d) => d.special && employeeMatchesConditions(created[0], d.conditions)
           );
 
-          if (specialToAdd) {
+          if (specialToAdd?.length) {
             specialToAdd?.forEach((d) => {
               documentsMissing.push({
                 applies: created[0].id,

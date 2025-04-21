@@ -33,6 +33,8 @@ import { FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessa
 import { Input } from './ui/input';
 require('dotenv').config();
 // import { useToast } from './ui/use-toast'
+import { equipmentMatchesConditions } from '@/app/dashboard/employee/conditionUtils';
+import { fetchAllEquipmentWithRelationsById } from '@/app/server/GET/actions';
 import QRCode from 'react-qr-code';
 import AddTypeModal from './AddTypeModal';
 type VehicleType = {
@@ -73,12 +75,14 @@ export default function VehiclesForm2({
   types: vehicleType,
   brand_vehicles,
   role,
+  documentsTypes,
 }: {
   vehicle: any | null;
   children: ReactNode;
   types: generic[];
   brand_vehicles: VehicleBrand[] | null;
   role?: string;
+  documentsTypes: DocumentTypes[];
 }) {
   const searchParams = useSearchParams();
   // const id = params
@@ -364,20 +368,39 @@ export default function VehiclesForm2({
             .select();
 
           const documentsMissing: {
-            applies: number;
+            applies: string;
             id_document_types: string;
             validity: string | null;
             user_id: string | undefined;
           }[] = [];
 
-          mandatoryDocuments?.Equipos?.forEach((document) => {
-            documentsMissing.push({
-              applies: vehicle?.[0]?.id,
-              id_document_types: document.id,
-              validity: null,
-              user_id: loggedUser,
+          documentsTypes
+            ?.filter((document) => !document.special)
+            ?.forEach((document) => {
+              documentsMissing.push({
+                applies: vehicle?.[0]?.id,
+                id_document_types: document.id,
+                validity: null,
+                user_id: loggedUser,
+              });
             });
-          });
+
+          const created = await fetchAllEquipmentWithRelationsById(vehicle?.[0]?.id);
+
+          // 3) documentos especiales que SÍ cumple
+          const specialToAdd = documentsTypes?.filter(
+            (d) => d.special && equipmentMatchesConditions(created[0], d.conditions)
+          );
+          if (specialToAdd?.length) {
+            specialToAdd?.forEach((d) => {
+              documentsMissing.push({
+                applies: created[0].id,
+                id_document_types: d.id,
+                validity: null,
+                user_id: loggedUser,
+              });
+            });
+          }
 
           const { data: documentData, error: documentError } = await supabase
             .from('documents_equipment')
@@ -810,9 +833,7 @@ export default function VehiclesForm2({
                         <PopoverContent className="w-[250px] p-0 max-h-[200px] overflow-y-auto">
                           <Command>
                             <CommandInput disabled={readOnly} placeholder="Buscar marca..." className="h-9" />
-                            <CommandEmpty className="py-2 px-2">
-                              No se encontró ninguna marca
-                            </CommandEmpty>
+                            <CommandEmpty className="py-2 px-2">No se encontró ninguna marca</CommandEmpty>
                             <CommandGroup>
                               {brand_vehicles?.map((option) => (
                                 <CommandItem

@@ -59,6 +59,24 @@ const baseVehiclePropertiesConfig = [
   { label: 'Cliente', accessor_key: 'contractor_equipment' },
 ];
 
+export function getVehiclePropertyValue(vehicle: any, accessor_key: string): string {
+  const parts = accessor_key.split('.');
+  let value = parts.reduce((acc, key) => (acc ? acc[key] : undefined), vehicle);
+  let result = '';
+
+  if (accessor_key === 'contractor_equipment' && Array.isArray(vehicle.contractor_equipment)) {
+    const names = vehicle.contractor_equipment.map((r: any) => r.contractor_id?.name).filter(Boolean);
+    return names.join(',');
+  }
+
+  if (value && typeof value === 'object' && 'name' in value) {
+    result = String(value.name).trim();
+  } else {
+    result = value != null ? String(value).trim() : '';
+  }
+  return result;
+}
+
 export function normalizeString(str: string): string {
   return str
     .toLowerCase()
@@ -234,23 +252,6 @@ export default function NewDocumentType({
   console.log(employeeMockValues, 'employeeMockValues');
 
   // Devuelve el valor de la propiedad del vehículo
-  function getVehiclePropertyValue(vehicle: any, accessor_key: string): string {
-    const parts = accessor_key.split('.');
-    let value = parts.reduce((acc, key) => (acc ? acc[key] : undefined), vehicle);
-    let result = '';
-
-    if (accessor_key === 'contractor_equipment' && Array.isArray(vehicle.contractor_equipment)) {
-      const names = vehicle.contractor_equipment.map((r: any) => r.contractor_id?.name).filter(Boolean);
-      return names.join(',');
-    }
-
-    if (value && typeof value === 'object' && 'name' in value) {
-      result = String(value.name).trim();
-    } else {
-      result = value != null ? String(value).trim() : '';
-    }
-    return result;
-  }
 
   // Este useEffect se ha fusionado con el principal para reducir la cantidad total
 
