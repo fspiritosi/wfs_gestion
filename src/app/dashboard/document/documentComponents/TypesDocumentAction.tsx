@@ -28,50 +28,52 @@ import { Button } from '@/components/ui/button';
 import { getRole } from '@/lib/utils/getRole';
 import ButtonTypeRefetch from './ButtonTypeRefetch';
 
+export const setVehicleDataOptions = async () => {
+  const brands = await fetchVehicleBrands();
+  const models = await fetchVehicleModels();
+  const types = await fetchTypeVehicles();
+  const typesOfVehicles = await fetchTypesOfVehicles();
+  const customers = await fetchCustomers();
+
+  return {
+    brand: brands.map((brand) => brand.name!),
+    model: models.map((model) => model.name!),
+    type: types.map((type) => type.name!),
+    types_of_vehicles: typesOfVehicles.map((type) => type.name!),
+    contractor_equipment: customers.map((customer) => customer.name!),
+  };
+};
+
+export   const setEmployeeDataOptions = async () => {
+  const workDiagrams = await fetchWorkDiagrams();
+  const guilds = await fetchGuilds();
+  const covenants = await fetchCovenants();
+  const categories = await fetchAllCategories();
+  const hierarchicalPositions = await fetchHierrarchicalPositions();
+  const customers = await fetchCustomers();
+  const provinces = await fetchProvinces();
+
+  return {
+    workflow_diagram: workDiagrams.map((diagram) => diagram.name),
+    guild: guilds.map((guild) => guild.name!) || [],
+    covenant: covenants.map((covenant) => covenant.name!),
+    category: categories.map((category) => category.name!),
+    hierarchical_position: hierarchicalPositions.map((position) => position.name),
+    contractor_employee: customers.map((customer) => customer.name),
+    province: provinces.map((province) => province.name.trim()),
+    gender: ['Masculino', 'Femenino', 'No Declarado'],
+    marital_status: ['Soltero', 'Casado', 'Viudo', 'Divorciado', 'Separado'],
+    nationality: ['Argentina', 'Extranjero'],
+    document_type: ['DNI', 'LE', 'LC', 'PASAPORTE'],
+    level_of_education: ['Primario', 'Secundario', 'Terciario', 'Posgrado', 'Universitario'],
+    status: ['Avalado', 'Completo', 'Incompleto', 'No avalado', 'Completo con doc vencida'],
+    type_of_contract: ['Período de prueba', 'A tiempo indeterminado', 'Plazo fijo'],
+  };
+};
+
 export default async function TypesDocumentAction({ optionChildrenProp }: { optionChildrenProp: string }) {
   const role = await getRole();
-  const setEmployeeDataOptions = async () => {
-    const workDiagrams = await fetchWorkDiagrams();
-    const guilds = await fetchGuilds();
-    const covenants = await fetchCovenants();
-    const categories = await fetchAllCategories();
-    const hierarchicalPositions = await fetchHierrarchicalPositions();
-    const customers = await fetchCustomers();
-    const provinces = await fetchProvinces();
-
-    return {
-      workflow_diagram: workDiagrams.map((diagram) => diagram.name),
-      guild: guilds.map((guild) => guild.name!) || [],
-      covenant: covenants.map((covenant) => covenant.name!),
-      category: categories.map((category) => category.name!),
-      hierarchical_position: hierarchicalPositions.map((position) => position.name),
-      contractor_employee: customers.map((customer) => customer.name),
-      province: provinces.map((province) => province.name.trim()),
-      gender: ['Masculino', 'Femenino', 'No Declarado'],
-      marital_status: ['Soltero', 'Casado', 'Viudo', 'Divorciado', 'Separado'],
-      nationality: ['Argentina', 'Extranjero'],
-      document_type: ['DNI', 'LE', 'LC', 'PASAPORTE'],
-      level_of_education: ['Primario', 'Secundario', 'Terciario', 'Posgrado', 'Universitario'],
-      status: ['Avalado', 'Completo', 'Incompleto', 'No avalado', 'Completo con doc vencida'],
-      type_of_contract: ['Período de prueba', 'A tiempo indeterminado', 'Plazo fijo'],
-    };
-  };
-  const setVehicleDataOptions = async () => {
-    const brands = await fetchVehicleBrands();
-    const models = await fetchVehicleModels();
-    const types = await fetchTypeVehicles();
-    const typesOfVehicles = await fetchTypesOfVehicles();
-    const customers = await fetchCustomers();
-
-    return {
-      brand: brands.map((brand) => brand.name!),
-      model: models.map((model) => model.name!),
-      type: types.map((type) => type.name!),
-      types_of_vehicles: typesOfVehicles.map((type) => type.name!),
-      contractor_equipment: customers.map((customer) => customer.name!),
-    };
-  };
-
+  
   const EmployeesOptionsData = await setEmployeeDataOptions();
   const VehicleOptionsData = await setVehicleDataOptions();
 

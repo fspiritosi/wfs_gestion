@@ -28,7 +28,7 @@ import { MultiSelect } from './ui/multi-select-combobox-condition';
 import { ScrollArea } from './ui/scroll-area';
 
 // Configuración base de propiedades disponibles para filtrar
-const baseEmployeePropertiesConfig = [
+export const baseEmployeePropertiesConfig = [
   // Propiedades simples
   { label: 'Sexo', accessor_key: 'gender' },
   { label: 'Estado Civil', accessor_key: 'marital_status' },
@@ -51,7 +51,7 @@ const baseEmployeePropertiesConfig = [
 ];
 
 // Configuración base de propiedades disponibles para filtrar vehículos
-const baseVehiclePropertiesConfig = [
+export const baseVehiclePropertiesConfig = [
   { label: 'Marca', accessor_key: 'brand' },
   { label: 'Modelo', accessor_key: 'model' },
   { label: 'Tipo', accessor_key: 'type' },
@@ -86,7 +86,7 @@ export function normalizeString(str: string): string {
 }
 
 //  Mapeo entre accessor_key y metadatos de relación para futura construcción de SQL
-const relationMeta: Record<string, any> = {
+export const relationMeta: Record<string, any> = {
   contractor_employee: {
     relation_type: 'many_to_many',
     relation_table: 'contractor_employee',
@@ -215,7 +215,7 @@ const defaultValues = [
     tooltip: 'Si el documento es de baja solo se pedira cuando el empleado este dado de baja',
   },
 ];
-type Condition = {
+export type Condition = {
   property: string;
   values: string[];
   id: string;
@@ -249,7 +249,6 @@ export default function NewDocumentType({
     baseVehiclePropertiesConfig.map((prop) => ({ ...prop, values: [] as string[] }))
   );
 
-  console.log(employeeMockValues, 'employeeMockValues');
 
   // Devuelve el valor de la propiedad del vehículo
 
@@ -660,6 +659,7 @@ export default function NewDocumentType({
   const addCondition = () => {
     setConditions((prev) => [...prev, { property: '', values: [], id: Date.now().toString() }]);
   };
+  console.log(conditions, 'conditions');
 
   return (
     <Form {...form}>
@@ -851,34 +851,6 @@ export default function NewDocumentType({
             })}
           </TooltipProvider>
         </div>
-        {special && (
-          <></>
-          // <FormField
-          //   control={form.control}
-          //   name="description"
-          //   render={({ field }) => (
-          //     <FormItem>
-          //       <div>
-          //         <FormLabel>Documentacion Especial</FormLabel>
-          //         <Select onValueChange={field.onChange} defaultValue={field.value}>
-          //           <FormControl>
-          //             <SelectTrigger>
-          //               <SelectValue placeholder="Seleccionar documento especial" />
-          //             </SelectTrigger>
-          //           </FormControl>
-          //           <SelectContent>
-          //             <SelectItem value="Maneja">Maneja</SelectItem>
-          //             <SelectItem value="Habilitacion especial">Habilitacion especial</SelectItem>
-
-          //           </SelectContent>
-          //         </Select>
-          //       </div>
-          //       <FormMessage />
-          //     </FormItem>
-          //   )}
-          // />
-        )}
-
         {special && (
           <div className="mt-4 border rounded-lg p-4 bg-slate-50">
             <div className="flex justify-between flex-col items-center mb-4">

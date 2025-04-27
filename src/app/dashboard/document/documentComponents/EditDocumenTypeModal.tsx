@@ -1,4 +1,6 @@
 'use client';
+import { baseEmployeePropertiesConfig, baseVehiclePropertiesConfig, Condition, getEmployeePropertyValue, getVehiclePropertyValue, normalizeString, relationMeta } from '@/components/NewDocumentType';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -10,12 +12,17 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import { MultiSelect } from '@/components/ui/multi-select-combobox-condition';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Separator } from '@/components/ui/separator';
 import {
   Sheet,
   SheetClose,
@@ -33,22 +40,46 @@ import { useCountriesStore } from '@/store/countries';
 import { useLoggedUserStore } from '@/store/loggedUser';
 import { Equipo } from '@/zodSchemas/schemas';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { PlusCircle, Truck, Users, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
 
 type Props = {
   Equipo: Equipo[0];
+  employeeMockValues: Record<string, string[] | []>;
+  vehicleMockValues: Record<string, string[] | []>;
+  employees: EmployeeDetailed[];
+  vehicles: VehicleWithBrand[];
 };
-export function EditModal({ Equipo }: Props) {
+export function EditModal({ Equipo, employeeMockValues, vehicleMockValues, employees, vehicles }: Props) {
   const supabase = supabaseBrowser();
   const [special, setSpecial] = useState(false);
   const [allResources, setAllResources] = useState<any[]>([]);
   const router = useRouter();
   const fetchDocumentTypes = useCountriesStore((state) => state.documentTypes);
   const actualCompany = useLoggedUserStore((state) => state.actualCompany);
+  const [showEmployeePreview, setShowEmployeePreview] = useState(false);
+  const [showVehiclePreview, setShowVehiclePreview] = useState(false);
+  const [conditions, setConditions] = useState<Condition[]>(()=>{
+    return Equipo?.conditions?.map((c) => ({
+      id:crypto.randomUUID(),
+      property:c.property_label ||baseVehiclePropertiesConfig.find((p) => p.accessor_key === c.property_key)?.label || '',
+      values:c.reference_values?.map((v) => v.value) || c.values || [],
+    })) || [];
+  });
+
+  const [matchingEmployees, setMatchingEmployees] = useState<EmployeeDetailed[]>([]);
+  const [matchingVehicles, setMatchingVehicles] = useState<VehicleWithBrand[]>([]);
+    // Estado para mantener las propiedades con sus valores dinámicos
+    const [employeePropertiesConfig, setEmployeePropertiesConfig] = useState(
+      baseEmployeePropertiesConfig?.map((prop) => ({ ...prop, values: [] as string[] }))
+    );
+    const [vehiclePropertiesConfig, setVehiclePropertiesConfig] = useState(
+      baseVehiclePropertiesConfig?.map((prop) => ({ ...prop, values: [] as string[] }))
+    );
   const FormSchema = z.object({
     name: z
       .string({ required_error: 'Este campo es requerido' })
@@ -123,11 +154,149 @@ export function EditModal({ Equipo }: Props) {
       : itemsTotales.filter((e) => e.id === 'is_it_montlhy' || e.id === 'private' || e.id === 'explired');
   });
 
+    function prepareConditionsForStorage() {
+      // Ignorar condiciones vacías
+      const validConditions = conditions.filter((c) => c.property && c.values && c.values.length > 0);
+  
+      if (validConditions.length === 0) {
+        return null;
+      }
+  
+      return validConditions
+        .map((condition) => {
+          // Encuentra la configuración de esta propiedad
+          const propConfig = employeePropertiesConfig.find((p) => p.label === condition.property);
+          if (!propConfig) return null;
+  
+          // Determina si es una relación (propiedades que son objetos o arrays)
+          const isRelation = [
+            'contractor_employee',
+            'province',
+            'hierarchical_position',
+            'category',
+            'guild',
+            'covenant',
+            'city',
+          ].includes(propConfig.accessor_key);
+  
+          // Tipo especial para contractor_employee (array de relaciones)
+          const relationsColumns = ['contractor_employee'];
+          const isArrayRelation = relationsColumns.includes(propConfig.accessor_key);
+  
+          let reference_values: { id: string; value: string }[] = [];
+          if (isRelation) {
+            // Buscar FIRST employee que contenga el valor para obtener su ID (si está presente)
+            reference_values = condition.values.map((value) => {
+              const emp = employees.find((e) => {
+                const empVal = getEmployeePropertyValue(e, propConfig.accessor_key);
+                return empVal?.toLowerCase() === value.toLowerCase();
+              });
+              // Para relaciones 1:N el objeto suele estar directamente en la propiedad
+              const relatedObj = (emp ? (emp[propConfig.accessor_key as keyof EmployeeDetailed] as any) : null) as any;
+              const relatedId = relatedObj?.id ?? relatedObj ?? '';
+              console.log(relatedId, 'relatedId');
+              return {
+                id: relatedId[0]?.customers?.id ? relatedId[0].customers.id : relatedId,
+                value,
+              };
+            });
+          }
+  
+          // Añadir metadatos de relación para uso en BD
+          const meta = relationMeta[propConfig.accessor_key] || null;
+  
+          console.log(reference_values, 'reference_values');
+  
+          return {
+            property_key: propConfig.accessor_key,
+            values: condition.values,
+            reference_values: reference_values,
+            ids: reference_values.length ? reference_values.map((r) => r.id) : condition.values, // Para direct, usar los valores mismos
+            is_relation: isRelation,
+            is_array_relation: isArrayRelation,
+            relation_type: meta ? meta.relation_type : 'direct',
+            relation_table: meta?.relation_table || null,
+            column_on_employees: meta?.column_on_employees || null,
+            column_on_relation: meta?.column_on_relation || null,
+            filter_column: meta?.filter_column || propConfig.accessor_key,
+            property_label: condition.property,
+          };
+        })
+        .filter(Boolean); // Eliminar nulls
+    }
+  
+    // Serializar condiciones de vehículos para almacenamiento
+    function prepareVehicleConditionsForStorage() {
+      const validConditions = conditions.filter((c) => c.property && c.values.length);
+      if (validConditions.length === 0) {
+        return null;
+      }
+  
+      // Definir relaciones (igual que en empleados)
+      const relationKeys = ['contractor_equipment', 'brand', 'model', 'type', 'types_of_vehicles'];
+      const arrayRelationKeys = ['contractor_equipment'];
+  
+      return validConditions
+        .map((condition) => {
+          const propConfig = vehiclePropertiesConfig.find((p) => p.label === condition.property);
+          if (!propConfig) return null;
+  
+          const isRelation = relationKeys.includes(propConfig.accessor_key);
+          const isArrayRelation = arrayRelationKeys.includes(propConfig.accessor_key);
+  
+          let reference_values: { id: string; value: string }[] = [];
+          if (isRelation) {
+            reference_values = condition.values.map((value) => {
+              const veh = vehicles.find((v) => {
+                const vehVal = getVehiclePropertyValue(v, propConfig.accessor_key);
+                return vehVal?.toLowerCase() === value.toLowerCase();
+              }) as any;
+              // Para contractor_equipment es array, para otros puede ser objeto
+              if (isArrayRelation && veh && Array.isArray(veh.contractor_equipment)) {
+                // Busca el contractor_id correspondiente al valor
+                const contractor = veh.contractor_equipment.find(
+                  (r: any) => r.contractor_id?.name?.toLowerCase() === value.toLowerCase()
+                );
+                return { id: contractor?.contractor_id?.id || '', value };
+              } else if (veh && propConfig.accessor_key.includes('.')) {
+                // Para relaciones 1:N anidadas (ej: brand.name)
+                const [main, sub] = propConfig.accessor_key.split('.');
+                return { id: veh[main as any]?.id || '', value };
+              } else if (veh && veh[propConfig.accessor_key]) {
+                return { id: veh[propConfig.accessor_key]?.id || '', value };
+              }
+              return { id: '', value };
+            });
+          }
+  
+          const meta = relationMeta[propConfig.accessor_key] || null;
+  
+          return {
+            property_key: propConfig.accessor_key,
+            values: condition.values,
+            ids: reference_values.length ? reference_values.map((r) => r.id) : condition.values,
+            is_relation: !!meta,
+            is_array_relation: isArrayRelation,
+            relation_type: meta?.relation_type || 'direct',
+            relation_table: meta?.relation_table || null,
+            column_on_vehicles: meta?.column_on_vehicles || null,
+            column_on_relation: meta?.column_on_relation || null,
+            filter_column: meta?.filter_column || propConfig.accessor_key,
+          };
+        })
+        .filter(Boolean);
+    }
+  
+
   async function onSubmit(values: z.infer<typeof FormSchema>) {
+        // Convertir las condiciones a formato serializable
+        const serializedConditions =
+        form.getValues('applies') === 'Equipos' ? prepareVehicleConditionsForStorage() : prepareConditionsForStorage();
     const formattedValues = {
       ...values,
       name: formatName(values.name),
       description: formatDescription(values.description),
+      conditions: serializedConditions,
     };
 
     toast.promise(
@@ -329,7 +498,153 @@ export function EditModal({ Equipo }: Props) {
       }
     );
   }
+    // 2. Función que filtra empleados según las condiciones
+    function filterEmployeesByConditions(empleados: any[], condiciones: any[], propConfig: any[]) {
+      // Si no hay condiciones, mostrar todos los empleados
+      if (!condiciones.length) return empleados;
+  
+      return empleados.filter((employee) => {
+        // El empleado debe cumplir TODAS las condiciones (AND entre condiciones)
+        const cumple = condiciones.every((condition) => {
+          // Si la condición no tiene propiedad o valores, se omite
+          if (!condition.property || !condition.values?.length) return true;
+  
+          // Buscar la configuración de la propiedad
+          const propertyConfig = propConfig.find((config) => config.label === condition.property);
+          if (!propertyConfig) return true;
+  
+          // Caso especial para clientes (contractor_employee)
+          if (propertyConfig.accessor_key === 'contractor_employee') {
+            const contractorEmployees = employee.contractor_employee || [];
+  
+            // Verificar si el empleado tiene al menos uno de los clientes seleccionados
+            const tieneAlgunClienteSeleccionado = condition.values.some((clienteSeleccionado: string) => {
+              return contractorEmployees.some(
+                (contrato: any) =>
+                  contrato &&
+                  contrato.customers &&
+                  normalizeString(contrato.customers.name) === normalizeString(clienteSeleccionado)
+              );
+            });
+            return tieneAlgunClienteSeleccionado;
+          }
+  
+          // Para el resto de propiedades, comportamiento normal
+          const employeeValue = getEmployeePropertyValue(employee, propertyConfig.accessor_key);
+  
+          // El empleado cumple si coincide con AL MENOS UNO de los valores (OR entre valores)
+          const resultado = condition.values.some((v: string) => {
+            // Usar normalizeString para una comparación más robusta
+            const match = normalizeString(employeeValue) === normalizeString(v);
+            return match;
+          });
+  
+          return resultado;
+        });
+  
+        return cumple;
+      });
+    }
+  
+    // 2.5. Función que filtra vehículos según las condiciones
+    function filterVehiclesByConditions(vehs: any[], condiciones: Condition[], propConfig: any[]) {
+      if (!condiciones.length) return vehs;
+      return vehs.filter((v) =>
+        condiciones.every((c) => {
+          if (!c.property || !c.values?.length) return true;
+          const cfg = propConfig.find((p) => p.label === c.property);
+          if (!cfg) return true;
+          const val = getVehiclePropertyValue(v, cfg.accessor_key);
+          return c.values.some((x) => normalizeString(val) === normalizeString(x));
+        })
+      );
+    }
 
+
+    // 3. Aplicar filtros cuando cambien las condiciones
+    useEffect(() => {
+      // Solo aplicar filtros si ya se han cargado empleados
+      if (employees.length > 0) {
+        const filtered = filterEmployeesByConditions(employees, conditions, employeePropertiesConfig);
+        setMatchingEmployees(filtered);
+      }
+      if (vehicles.length > 0) {
+        setMatchingVehicles(filterVehiclesByConditions(vehicles, conditions, vehiclePropertiesConfig));
+      }
+    }, [conditions, employees, employeePropertiesConfig, vehicles, vehiclePropertiesConfig]);
+
+  useEffect(() => {
+    const fetchAndSetupEmployees = async () => {
+      try {
+        // Extraer valores únicos para cada propiedad
+        const updatedConfig = baseEmployeePropertiesConfig.map((prop) => {
+          const defaultVals = employeeMockValues[prop.accessor_key] || [];
+          const values =
+            defaultVals.length > 0
+              ? defaultVals
+              : Array.from(
+                  new Set(
+                    employees
+                      .map((employee) => getEmployeePropertyValue(employee, prop.accessor_key))
+                      .filter((v) => v !== undefined && v !== null && v !== '')
+                  )
+                );
+          return { ...prop, values };
+        });
+        setEmployeePropertiesConfig(updatedConfig);
+        setMatchingEmployees(employees);
+      } catch (error) {
+        console.error('Error al cargar empleados:', error);
+      }
+    };
+
+    // 1.5. Cargar vehículos (solo una vez al montar el componente)
+    const fetchAndSetupVehicles = async () => {
+      const updated = baseVehiclePropertiesConfig.map((prop) => {
+        const defaultVals = vehicleMockValues[prop.accessor_key] || [];
+        const vals =
+          defaultVals.length > 0
+            ? defaultVals
+            : Array.from(new Set(vehicles.map((v) => getVehiclePropertyValue(v, prop.accessor_key)).filter((v) => v)));
+        return { ...prop, values: vals };
+      });
+      setVehiclePropertiesConfig(updated);
+  setMatchingVehicles(vehicles);
+    
+    };
+
+    fetchAndSetupEmployees();
+    fetchAndSetupVehicles();
+    
+  },[vehicles, employees])
+
+  console.log(Equipo, 'equipo');
+
+  const addCondition = () => {
+    setConditions((prev) => [...prev, { property: '', values: [], id: Date.now().toString() }]);
+  };
+
+    // Actualiza los valores de una condición existente
+    const updateConditionValues = (id: string, values: string[]) => {
+      setConditions((prev) => prev.map((condition) => (condition.id === id ? { ...condition, values } : condition)));
+    };
+
+    const updateCondition = (id: string, field: 'property' | 'value', value: string) => {
+      setConditions(
+        conditions.map((condition) => {
+          if (condition.id === id) {
+            return { ...condition, [field]: value };
+          }
+          return condition;
+        })
+      );
+    };
+    // Elimina una condición por su ID
+    const removeCondition = (id: string) => {
+      setConditions(conditions.filter((condition) => condition.id !== id));
+    };
+  
+  
   return (
     <Sheet>
       <SheetTrigger asChild>
@@ -344,7 +659,7 @@ export function EditModal({ Equipo }: Props) {
           Editar
         </Button>
       </SheetTrigger>
-      <SheetContent className="border-l-4 border-l-muted flex flex-col justify-between overflow-y-auto">
+      <SheetContent className="border-l-4 border-l-muted flex flex-col justify-between overflow-y-auto sm:max-w-lg">
         <div>
           <SheetHeader>
             <SheetTitle>Editar tipo de documento</SheetTitle>
@@ -458,35 +773,225 @@ export function EditModal({ Equipo }: Props) {
                     ))}
                   </TooltipProvider>
                 </div>
-                {special && (
-                  <FormField
-                    control={form.control}
-                    name="description"
-                    render={({ field }) => (
-                      <FormItem>
-                        <div>
-                          <FormLabel>Documentacion Especial</FormLabel>
-                          <Select onValueChange={field.onChange} defaultValue={field.value}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Seleccionar documento especial" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="Maneja">Maneja</SelectItem>
-                              <SelectItem value="Habilitacion especial">Habilitacion especial</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                {form.getValues('special') === true && (
+          <div className="mt-4 border rounded-lg p-4 bg-slate-50">
+            <div className="flex justify-between flex-col items-center mb-4">
+              <h3 className="font-semibold text-lg mb-2">Condiciones Especiales</h3>
+              <div className="flex justify-around w-full">
+                {form.getValues('applies') === 'Persona' && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    type="button"
+                    onClick={() => setShowEmployeePreview(!showEmployeePreview)}
+                  >
+                    <Users className="h-4 w-4 mr-1" />
+                    {showEmployeePreview ? 'Ocultar' : 'Ver'} Empleados ({matchingEmployees.length})
+                  </Button>
                 )}
-                <SheetFooter className="flex  gap-11 flex-wrap">
+                {form.getValues('applies') === 'Equipos' && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    type="button"
+                    onClick={() => setShowVehiclePreview(!showVehiclePreview)}
+                  >
+                    <Truck className="h-4 w-4 mr-1" />
+                    {showVehiclePreview ? 'Ocultar' : 'Ver'} Equipos ({matchingVehicles.length})
+                  </Button>
+                )}
+                <Button variant="outline" size="sm" type="button" onClick={addCondition}>
+                  <PlusCircle className="h-4 w-4 mr-1" />
+                  Añadir Condición
+                </Button>
+              </div>
+            </div>
+
+            {conditions.length === 0 ? (
+              <div className="text-center py-6 text-muted-foreground">
+                <p>Añade condiciones para especificar a qué empleados aplica este documento.</p>
+                <Button variant="outline" className="mt-2" type="button" onClick={addCondition}>
+                  <PlusCircle className="h-4 w-4 mr-1" />
+                  Añadir Primera Condición
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {conditions.map((condition) => (
+                  <Card key={crypto.randomUUID()}>
+                    <CardContent className="p-3">
+                      <div className="flex items-center gap-2">
+                        <Select
+                          value={condition.property}
+                          onValueChange={(value) => updateCondition(condition.id, 'property', value)}
+                        >
+                          <SelectTrigger className="w-[180px]">
+                            <SelectValue placeholder="Seleccionar propiedad" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {form.getValues('applies') === 'Equipos'
+                              ? vehiclePropertiesConfig.map((prop) => (
+                                  <SelectItem key={crypto.randomUUID()} value={prop.label}>
+                                    {prop.label}
+                                  </SelectItem>
+                                ))
+                              : employeePropertiesConfig.map((prop) => (
+                                  <SelectItem key={crypto.randomUUID()} value={prop.label}>
+                                    {prop.label}
+                                  </SelectItem>
+                                ))}
+                          </SelectContent>
+                        </Select>
+                        {condition.property && (
+                          <MultiSelect
+                            options={
+                              form.getValues('applies') === 'Equipos'
+                                ? vehiclePropertiesConfig
+                                    .find((prop) => prop.label === condition.property)
+                                    ?.values.map((value: string) => ({
+                                      label: value,
+                                      value: value,
+                                    })) || []
+                                : employeePropertiesConfig
+                                    .find((prop) => prop.label === condition.property)
+                                    ?.values.map((value: string) => ({
+                                      label: value,
+                                      value: value,
+                                    })) || []
+                            }
+                            selectedValues={condition.values}
+                            setSelectedValues={(values: string[]) => updateConditionValues(condition.id, values)}
+                            emptyMessage="No hay valores disponibles"
+                            placeholder="Seleccionar valores"
+                          />
+                        )}
+
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          type="button"
+                          onClick={() => removeCondition(condition.id)}
+                          className="ml-auto"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+
+                {conditions.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    <span className="text-sm font-medium">Resumen:</span>
+                    {conditions.map((condition) => {
+                      const propertyLabel = condition.property;
+
+                      return condition.property && condition?.values?.length ? (
+                        <Badge key={crypto.randomUUID()} variant="outline" className="text-xs">
+                          {propertyLabel}: {condition.values.join(', ')}
+                        </Badge>
+                      ) : null;
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {(showEmployeePreview && form.getValues('applies') === 'Persona') ||
+            (showVehiclePreview && form.getValues('applies') === 'Equipos') ? (
+              <Accordion type="single" collapsible className="mt-4">
+                <AccordionItem value="employees">
+                  <AccordionTrigger>
+                    {form.getValues('applies') === 'Persona'
+                      ? `Empleados que cumplen las condiciones (${matchingEmployees.length})`
+                      : `Equipos que cumplen las condiciones (${matchingVehicles.length})`}
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <ScrollArea className="h-[200px] rounded-md border p-2">
+                      {(form.getValues('applies') === 'Persona' && matchingEmployees.length === 0) ||
+                      (form.getValues('applies') === 'Equipos' && matchingVehicles.length === 0) ? (
+                        <div className="text-center py-8 text-muted-foreground">
+                          No hay {form.getValues('applies') === 'Persona' ? 'empleados' : 'equipos'} que cumplan todas
+                          las condiciones seleccionadas
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {/* Renderizado de empleados que cumplen con las condiciones */}
+                          {(form.getValues('applies') === 'Persona' ? matchingEmployees : matchingVehicles).map(
+                            (employee: any) => {
+                              return (
+                                <div
+                                  key={crypto.randomUUID()}
+                                  className="flex items-center gap-2 p-2 hover:bg-slate-100 rounded-md"
+                                >
+                                  {form.getValues('applies') === 'Persona' ? (
+                                    <Avatar>
+                                      <AvatarImage
+                                        src={employee.picture || '/placeholder.svg'}
+                                        alt={employee.firstname}
+                                      />
+                                      <AvatarFallback>{employee.firstname.substring(0, 2)}</AvatarFallback>
+                                    </Avatar>
+                                  ) : (
+                                    <Avatar>
+                                      <AvatarImage
+                                        src={employee.picture || '/placeholder.svg'}
+                                        alt={employee.brand.name}
+                                      />
+                                      <AvatarFallback>{employee.brand.name.substring(0, 2)}</AvatarFallback>
+                                    </Avatar>
+                                  )}
+                                  <div>
+                                    <p className="font-medium">
+                                      {form.getValues('applies') === 'Persona'
+                                        ? `${employee.firstname} ${employee.lastname}`
+                                        : `${employee.brand.name} ${employee.model.name}`}
+                                    </p>
+                                    <div className="flex gap-1 flex-wrap">
+                                      {conditions
+                                        .filter((condition) => condition.property && condition.values.length)
+                                        .flatMap((condition) => {
+                                          const propertyConfig =
+                                            form.getValues('applies') === 'Persona'
+                                              ? employeePropertiesConfig.find(
+                                                  (config) => config.label === condition.property
+                                                )
+                                              : vehiclePropertiesConfig.find(
+                                                  (config) => config.label === condition.property
+                                                );
+                                          if (!propertyConfig) return [];
+                                          const employeeValue =
+                                            form.getValues('applies') === 'Persona'
+                                              ? getEmployeePropertyValue(employee, propertyConfig.accessor_key)
+                                              : getVehiclePropertyValue(employee, propertyConfig.accessor_key);
+                                          const badges = condition.values
+                                            .filter((v) => employeeValue.toLowerCase() === v.toLowerCase())
+                                            .map((v) => (
+                                              <Badge key={crypto.randomUUID()} variant="outline" className="text-xs">
+                                                {condition.property}: {v}
+                                              </Badge>
+                                            ));
+                                          return badges;
+                                        })}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            }
+                          )}
+                        </div>
+                      )}
+                    </ScrollArea>
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
+            ) : null}
+          </div>
+        )}
+                <SheetFooter className="flex justify-between flex-wrap">
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
-                      <Button variant={'destructive'}>Eliminar</Button>
+                      <Button variant={'destructive'}>Eliminar tipo de documento</Button>
                     </AlertDialogTrigger>
                     <AlertDialogContent>
                       <AlertDialogHeader>
@@ -501,7 +1006,7 @@ export function EditModal({ Equipo }: Props) {
                         <AlertDialogCancel>Cancelar</AlertDialogCancel>
                         <AlertDialogAction className={buttonVariants({ variant: 'destructive' })} asChild>
                           <Button onClick={() => handleDeleteDocumentType()} variant={'destructive'}>
-                            Eliminar
+                            Eliminar tipo de documento
                           </Button>
                         </AlertDialogAction>
                       </AlertDialogFooter>
@@ -516,10 +1021,36 @@ export function EditModal({ Equipo }: Props) {
             </Form>
           </div>
         </div>
+<Separator className='mb-2 mt-0' />
+        <div className='flex justify-between'>
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button variant={'destructive'} className="self-end">
+              Eliminar alertas
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Estas totalmente seguro?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Esta acción eliminará la alerta de todos los recursos a los que no se les haya subido el documento. Los
+                documentos ya subidos y vinculados a este tipo de documento permanecerán intactos.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction className={buttonVariants({ variant: 'destructive' })} asChild>
+                <Button variant={'destructive'} onClick={() => handleDeleteAlerts()}>
+                  Eliminar alertas
+                </Button>
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         <AlertDialog>
           <AlertDialogTrigger disabled={!(resourcesToInsert.length > 0) || Equipo.applies === 'Empresa'} asChild>
-            <Button className="self-end">Generar Alertas de documento</Button>
+            <Button className="self-end">{!(resourcesToInsert.length > 0) || Equipo.applies === 'Empresa' ? 'Todos los recursos ya tienen alerta' : 'Generar Alertas'}</Button>
           </AlertDialogTrigger>
           <AlertDialogContent className="max-h-[90vh] overflow-y-auto">
             <AlertDialogHeader>
@@ -564,30 +1095,8 @@ export function EditModal({ Equipo }: Props) {
           </AlertDialogContent>
         </AlertDialog>
 
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <Button variant={'destructive'} className="self-end">
-              Eliminar alertas del documento
-            </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Estas totalmente seguro?</AlertDialogTitle>
-              <AlertDialogDescription>
-                Esta acción eliminará la alerta de todos los recursos a los que no se les haya subido el documento. Los
-                documentos ya subidos y vinculados a este tipo de documento permanecerán intactos.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancelar</AlertDialogCancel>
-              <AlertDialogAction className={buttonVariants({ variant: 'destructive' })} asChild>
-                <Button variant={'destructive'} onClick={() => handleDeleteAlerts()}>
-                  Eliminar alertas
-                </Button>
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+        </div>
+
       </SheetContent>
     </Sheet>
   );

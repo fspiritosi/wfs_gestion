@@ -10,10 +10,18 @@ function TypesDocumentsView({
   personas,
   equipos,
   empresa,
+  employeeMockValues,
+  vehicleMockValues,
+  employees,
+  vehicles,
 }: {
   personas?: boolean;
   equipos?: boolean;
   empresa?: boolean;
+  employeeMockValues: Record<string, string[] | []>;
+  vehicleMockValues: Record<string, string[] | []>;
+  employees: EmployeeDetailed[];
+  vehicles: VehicleWithBrand[];
 }) {
   const document_types = useCountriesStore((state) => state.companyDocumentTypes);
 
@@ -91,7 +99,7 @@ function TypesDocumentsView({
         </TabsList>
         {personas && (
           <TabsContent value="Personas">
-            <DocumentsTable data={filteredDocPersonas} filters={filters.personas}>
+            <DocumentsTable data={filteredDocPersonas} filters={filters.personas} employeeMockValues={employeeMockValues} vehicleMockValues={vehicleMockValues} employees={employees} vehicles={vehicles}>
               <FilterHeader
                 filters={filters.personas}
                 docOptions={docOptions}
@@ -102,7 +110,7 @@ function TypesDocumentsView({
         )}
         {equipos && (
           <TabsContent value="Equipos">
-            <DocumentsTable data={filteredDocEquipos} filters={filters.equipos}>
+            <DocumentsTable data={filteredDocEquipos} filters={filters.equipos} employeeMockValues={employeeMockValues} vehicleMockValues={vehicleMockValues} employees={employees} vehicles={vehicles}>
               <FilterHeader
                 filters={filters.equipos}
                 docOptions={docOptions}
@@ -113,7 +121,7 @@ function TypesDocumentsView({
         )}
         {empresa && (
           <TabsContent value="Empresa">
-            <DocumentsTable data={filteredDocEmpresa} filters={filters.empresa}>
+            <DocumentsTable data={filteredDocEmpresa} filters={filters.empresa} employeeMockValues={employeeMockValues} vehicleMockValues={vehicleMockValues} employees={employees} vehicles={vehicles}>
               <FilterHeader
                 filters={filters.empresa}
                 docOptions={docOptions}

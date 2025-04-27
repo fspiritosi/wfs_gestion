@@ -1,3 +1,4 @@
+import { fetchAllEmployeesWithRelations, fetchAllEquipmentWithRelations } from '@/app/server/GET/actions';
 import DocumentNav from '@/components/DocumentNav';
 import PageTableSkeleton from '@/components/Skeletons/PageTableSkeleton';
 import Viewcomponent from '@/components/ViewComponent';
@@ -8,8 +9,9 @@ import { Suspense } from 'react';
 import CompanyTabs from './documentComponents/CompanyTabs';
 import EmployeeDocumentsTabs from './documentComponents/EmployeeDocumentsTabs';
 import EquipmentTabs from './documentComponents/EquipmentTabs';
-import TypesDocumentAction from './documentComponents/TypesDocumentAction';
+import TypesDocumentAction, { setEmployeeDataOptions, setVehicleDataOptions } from './documentComponents/TypesDocumentAction';
 import TypesDocumentsView from './documentComponents/TypesDocumentsView';
+
 
 export default async function page() {
   const supabase = supabaseServer();
@@ -32,6 +34,11 @@ export default async function page() {
 
   const companyData =
     role === 'Invitado' ? typedDataCompany?.filter((e) => !e.id_document_types.private) : typedDataCompany;
+      const EmployeesOptionsData = await setEmployeeDataOptions();
+      const VehicleOptionsData = await setVehicleDataOptions();
+    
+      const empleadosCargados = await fetchAllEmployeesWithRelations();
+      const equiposCargados = await fetchAllEquipmentWithRelations();
 
   const viewData = {
     defaultValue: 'Documentos de empleados',
@@ -93,7 +100,7 @@ export default async function page() {
           description: 'Tipos de documentos auditables',
           buttonActioRestricted: [''],
           buttonAction: <TypesDocumentAction optionChildrenProp="all" />,
-          component: <TypesDocumentsView equipos empresa personas />,
+          component: <TypesDocumentsView equipos empresa personas employeeMockValues={EmployeesOptionsData} vehicleMockValues={VehicleOptionsData} employees={empleadosCargados} vehicles={equiposCargados} />,
         },
       },
       // {

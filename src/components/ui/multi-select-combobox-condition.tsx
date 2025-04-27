@@ -48,11 +48,11 @@ export function MultiSelect({
       <PopoverTrigger asChild className="h-fit">
         <Button variant="outline" role="combobox" aria-expanded={open} className="w-full justify-between">
           <div className="flex items-center overflow-hidden">
-            {selectedValues.length === 0 ? (
+            {selectedValues?.length === 0 ? (
               <span className="text-muted-foreground">{placeholder}</span>
             ) : (
               <div className="flex flex-wrap gap-1 overflow-hidden">
-                {selectedValues.map((value) => (
+                {selectedValues?.map((value) => (
                   <Badge key={value} variant="secondary" className="mr-1 text-xs py-1">
                     {options.find((option) => option.value === value)?.label || value}
                     <button
@@ -95,7 +95,7 @@ export function MultiSelect({
                   onSelect={() => handleSelect(option.value)}
                 >
                   <Check
-                    className={cn('mr-2 h-4 w-4', selectedValues.includes(option.value) ? 'opacity-100' : 'opacity-0')}
+                    className={cn('mr-2 h-4 w-4', selectedValues?.includes(option.value) ? 'opacity-100' : 'opacity-0')}
                   />
                   {option.label}
                 </CommandItem>

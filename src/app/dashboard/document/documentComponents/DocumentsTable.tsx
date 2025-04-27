@@ -1,4 +1,4 @@
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table';
 import { EditModal } from './EditDocumenTypeModal';
 
 interface DocumentsTableProps {
@@ -12,10 +12,14 @@ interface DocumentsTableProps {
     mandatory: string;
     private: string;
   };
-  children: React.ReactNode;  
+  children: React.ReactNode; 
+  employeeMockValues: Record<string, string[] | []>;
+  vehicleMockValues: Record<string, string[] | []>;
+  employees: EmployeeDetailed[];
+  vehicles: VehicleWithBrand[]; 
 }
 
-const DocumentsTable = ({ data, filters,children }: DocumentsTableProps) => (
+const DocumentsTable = ({ data, filters,children, employeeMockValues, vehicleMockValues, employees, vehicles }: DocumentsTableProps) => (
   <Table>
     <TableHeader>
       <TableRow>
@@ -32,7 +36,7 @@ const DocumentsTable = ({ data, filters,children }: DocumentsTableProps) => (
           <TableCell className="text-center">{doc.explired ? 'Si' : 'No'}</TableCell>
           <TableCell className="text-center">{doc.mandatory ? 'Si' : 'No'}</TableCell>
           <TableCell className="text-center">{doc.private ? 'Si' : 'No'}</TableCell>
-          <TableCell className="text-center"><EditModal Equipo={doc}  /></TableCell>
+          <TableCell className="text-center"><EditModal Equipo={doc} employeeMockValues={employeeMockValues} vehicleMockValues={vehicleMockValues} employees={employees} vehicles={vehicles} /></TableCell>
           
         </TableRow>
       ))}

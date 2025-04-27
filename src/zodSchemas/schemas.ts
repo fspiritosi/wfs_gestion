@@ -652,9 +652,51 @@ export const EquipoSchema = z
       type: z.object({
         name: z.string(),
       }),
+      conditions: z.array(
+        z.object({
+          ids: z.array(z.string()),
+          values: z.array(z.string()),
+          is_relation: z.boolean(),
+          property_key: z.string(),
+          filter_column: z.string(),
+          relation_type: z.string(),
+          property_label: z.string(),
+          relation_table: z.string(),
+          reference_values: z.array(z.object({ id: z.string(), value: z.string() })),
+          is_array_relation: z.boolean(),
+          column_on_relation: z.string(),
+          column_on_employees: z.string(),
+        })
+      ).optional(),
     })
   )
   .default([]);
+
+//   [
+//     {
+//         "ids": [
+//             "efba34ff-f49e-4297-95da-e0e86312b645"
+//         ],
+//         "values": [
+//             "La vieja"
+//         ],
+//         "is_relation": true,
+//         "property_key": "contractor_employee",
+//         "filter_column": "contractor_id",
+//         "relation_type": "many_to_many",
+//         "property_label": "Clientes",
+//         "relation_table": "contractor_employee",
+//         "reference_values": [
+//             {
+//                 "id": "efba34ff-f49e-4297-95da-e0e86312b645",
+//                 "value": "La vieja"
+//             }
+//         ],
+//         "is_array_relation": true,
+//         "column_on_relation": "employee_id",
+//         "column_on_employees": "id"
+//     }
+// ]
 
 export type Equipo = z.infer<typeof EquipoSchema>;
 
