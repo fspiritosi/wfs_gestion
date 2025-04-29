@@ -1,6 +1,6 @@
 'use client';
 
-import { CreateNewFormAnswer, UpdateVehicle } from '@/app/server/UPDATE/actions';
+import { CreateNewFormAnswer, UpdateFormAnswer, UpdateVehicle } from '@/app/server/UPDATE/actions';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
@@ -11,12 +11,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import { useLoggedUserStore } from '@/store/loggedUser';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { InfoCircledIcon } from '@radix-ui/react-icons';
 import { Check, ChevronsUpDown } from 'lucide-react';
 import moment from 'moment';
 import Image from 'next/image';
 import { useParams, useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { toast } from 'sonner';
 import * as z from 'zod';
 import BackButton from '../BackButton';
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
@@ -37,7 +39,7 @@ export const vehicleChecklistConfig = {
     { id: 'dominio', label: 'Dominio/patente', type: 'text', group: 'general', required: true, disabled: true },
     { id: 'modelo', label: 'Modelo', type: 'text', group: 'general', required: true, disabled: true },
     { id: 'marca', label: 'Marca', type: 'text', group: 'general', required: true, disabled: true },
-    { id: 'conductor', label: 'Conductor', type: 'text', group: 'general', required: true },
+    { id: 'chofer', label: 'Conductor', type: 'text', group: 'general', required: true },
 
     // Datos de Salida
     { id: 'fechaSalida', label: 'Fecha Salida', type: 'date', group: 'salida', required: true },
@@ -271,20 +273,21 @@ export const vehicleChecklistConfig = {
 };
 
 // Función para generar el schema de validación basado en la configuración
-function generateSchema(config: typeof vehicleChecklistConfig) {
+function generateSchema(config: typeof vehicleChecklistConfig, requiredGroups: string[]) {
   const schema: Record<string, any> = {};
 
   config.items.forEach((item) => {
+    const isRequired = requiredGroups.includes(item.group);
     if (item.type === 'radio') {
-      schema[item.id] = item.required
+      schema[item.id] = isRequired
         ? z.enum(item.options as [string, ...string[]], { required_error: `${item.label} es requerido` })
         : z.enum(item.options as [string, ...string[]]).optional();
     } else if (item.type === 'select') {
-      schema[item.id] = item.required
+      schema[item.id] = isRequired
         ? z.string({ required_error: `${item.label} es requerido` }).min(1, { message: 'Este campo es requerido' })
         : z.string().optional();
     } else {
-      schema[item.id] = item.required
+      schema[item.id] = isRequired
         ? z.string({ required_error: `${item.label} es requerido` }).min(1, { message: 'Este campo es requerido' })
         : z.string().optional();
     }
@@ -303,7 +306,14 @@ export default function CheckListVehicular({
   empleado_name,
   singurl,
   form_Info,
+  employees,
+  title,
+  description,
+  preview,
 }: {
+  title?: string;
+  description?: string;
+  preview?: boolean;
   defaultAnswer?: CheckListAnswerWithForm[];
   equipments?: EquipmentForm['equipments'];
   currentUser?: Profile[];
@@ -311,72 +321,121 @@ export default function CheckListVehicular({
   default_equipment_id?: string;
   empleado_name?: string;
   singurl?: string;
-  form_Info: CustomForm[];
+  form_Info?: CustomForm[];
+  employees?: {
+    label: string;
+    value: string;
+  }[];
 }) {
   const params = useParams();
   const router = useRouter();
+  console.log(employees, 'employees');
   const actualCompany = useLoggedUserStore((s) => s.actualCompany);
 
+  // Primero obtener el answer y flags
+  const answer = defaultAnswer?.[0]?.answer || ({} as any);
+  const inspeccionadoPorFilled = !!answer?.inspeccionadoPor;
+  const recibidoPorFilled = !!answer?.recibidoPor;
+  const isEmpty = !inspeccionadoPorFilled && !recibidoPorFilled;
+  const isOnlySalida = inspeccionadoPorFilled && !recibidoPorFilled;
+  const isCompleto = inspeccionadoPorFilled && recibidoPorFilled;
+
+  // Determinar los grupos requeridos según el estado
+  let requiredGroups: string[] = [];
+  if (isEmpty) requiredGroups = ['general', 'salida', 'chequeoSalida'];
+  else if (isOnlySalida) requiredGroups = ['entrada', 'chequeoEntrada', 'adicionales', 'recepcion'];
+  else if (isCompleto) requiredGroups = []; // Todo opcional/readonly
+
   // Crear el schema y el formulario
-  const [formSchema] = useState(() => generateSchema(vehicleChecklistConfig));
+  // Agregar campos de observaciones a mano al schema
+  const [formSchema] = useState(() => {
+    let schema = generateSchema(vehicleChecklistConfig, requiredGroups);
+    schema = schema.extend({
+      observaciones: z.string().optional(),
+      observacionesSalida: z.string().optional(),
+      observacionesEntrada: z.string().optional(),
+    });
+    return schema;
+  });
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
-    defaultValues: defaultAnswer?.length ? defaultAnswer[0].answer : {
-      fecha: moment().format('YYYY-MM-DD'),
-      hora: moment().format('HH:mm'),
-      movil: default_equipment_id || '',
-      interno: equipments?.find((e) => e.value === default_equipment_id)?.intern_number || '',
-      dominio:
-        equipments?.find((e) => e.value === default_equipment_id)?.domain ||
-        equipments?.find((e) => e.value === default_equipment_id)?.serie ||
-        '',
-      kilometraje: equipments?.find((e) => e.value === default_equipment_id)?.kilometer || '',
-      modelo: equipments?.find((e) => e.value === default_equipment_id)?.model || '',
-      marca: equipments?.find((e) => e.value === default_equipment_id)?.brand || '',
-      conductor: empleado_name?.toUpperCase() || currentUser?.[0]?.fullname?.toUpperCase() || '',
-      observaciones: '',
-      fecha_recepcion: moment().format('YYYY-MM-DD'),
-      hora_recepcion: moment().format('HH:mm'),
-      movil_recepcion: default_equipment_id || '',
-      interno_recepcion: equipments?.find((e) => e.value === default_equipment_id)?.intern_number || '',
-      dominio_recepcion:
-        equipments?.find((e) => e.value === default_equipment_id)?.domain ||
-        equipments?.find((e) => e.value === default_equipment_id)?.serie ||
-        '',
-      kilometraje_recepcion: equipments?.find((e) => e.value === default_equipment_id)?.kilometer || '',
-      modelo_recepcion: equipments?.find((e) => e.value === default_equipment_id)?.model || '',
-      marca_recepcion: equipments?.find((e) => e.value === default_equipment_id)?.brand || '',
-      conductor_recepcion: empleado_name?.toUpperCase() || currentUser?.[0]?.fullname?.toUpperCase() || '',
-      observaciones_recepcion: '',
-    }
+    defaultValues: defaultAnswer?.length
+      ? (defaultAnswer[0].answer as z.infer<typeof formSchema>)
+      : {
+          fecha: moment().format('YYYY-MM-DD'),
+          hora: moment().format('HH:mm'),
+          movil: default_equipment_id || '',
+          interno: equipments?.find((e) => e.value === default_equipment_id)?.intern_number || '',
+          dominio:
+            equipments?.find((e) => e.value === default_equipment_id)?.domain ||
+            equipments?.find((e) => e.value === default_equipment_id)?.serie ||
+            '',
+          kilometraje: equipments?.find((e) => e.value === default_equipment_id)?.kilometer || '',
+          modelo: equipments?.find((e) => e.value === default_equipment_id)?.model || '',
+          marca: equipments?.find((e) => e.value === default_equipment_id)?.brand || '',
+          inspeccionadoPor: empleado_name?.toUpperCase() || currentUser?.[0]?.fullname?.toUpperCase() || '',
+          observacionesSalida: '',
+          observacionesEntrada: '',
+          observaciones: '',
+          fecha_recepcion: moment().format('YYYY-MM-DD'),
+          hora_recepcion: moment().format('HH:mm'),
+          movil_recepcion: default_equipment_id || '',
+          interno_recepcion: equipments?.find((e) => e.value === default_equipment_id)?.intern_number || '',
+          dominio_recepcion:
+            equipments?.find((e) => e.value === default_equipment_id)?.domain ||
+            equipments?.find((e) => e.value === default_equipment_id)?.serie ||
+            '',
+          kilometraje_recepcion: equipments?.find((e) => e.value === default_equipment_id)?.kilometer || '',
+          modelo_recepcion: equipments?.find((e) => e.value === default_equipment_id)?.model || '',
+          marca_recepcion: equipments?.find((e) => e.value === default_equipment_id)?.brand || '',
+          conductor_recepcion: empleado_name?.toUpperCase() || currentUser?.[0]?.fullname?.toUpperCase() || '',
+          observaciones_recepcion: '',
+        },
   });
 
+  console.log(form.formState.errors, 'errors');
 
   // Función para enviar el formulario
   const onSubmit = async (data: z.infer<typeof formSchema>) => {
-    try {
-      const equipment = equipments?.find((equipment) => equipment.value === data.movil);
+    toast.promise(
+      async () => {
+        try {
+          const equipment = equipments?.find((equipment) => equipment.value === data.movil);
 
-      if (equipment && Number(data.kilometraje) < Number(equipment.kilometer)) {
-        form.setError('kilometraje', { message: `El kilometraje no puede ser menor a ${equipment.kilometer}` });
-        return;
+          if (equipment && Number(data.kilometraje) < Number(equipment.kilometer)) {
+            form.setError('kilometraje', { message: `El kilometraje no puede ser menor a ${equipment.kilometer}` });
+            return;
+          }
+
+          console.log(data, 'data');
+
+          // Si ya existe una respuesta previa (defaultAnswer[0]), hacemos update, si no, creamos
+          if (defaultAnswer && defaultAnswer.length > 0) {
+            // Update solo con los nuevos datos, merge en el backend
+            await UpdateFormAnswer(defaultAnswer[0].id, data);
+          } else {
+            await CreateNewFormAnswer(resetQrSelection ? form_Info?.[0].id || '' : (params.id as string), data);
+          }
+
+          if (equipment && Number(data.kilometraje) > Number(equipment.kilometer)) {
+            await UpdateVehicle(equipment.value, { kilometer: data.kilometraje });
+          }
+        } catch (error) {
+          console.error('Error al guardar el checklist:', error);
+        }
+      },
+      {
+        loading: 'Guardando checklist...',
+        success: 'Checklist guardado exitosamente',
+        error: 'Error al guardar el checklist',
       }
-
-    //   await CreateNewFormAnswer(resetQrSelection ? form_Info[0].id : params.id, data);
-
-      if (equipment && Number(data.kilometraje) > Number(equipment.kilometer)) {
-        await UpdateVehicle(equipment.value, { kilometer: data.kilometraje });
-      }
-
-      router.refresh();
-      if (resetQrSelection) {
-        resetQrSelection('');
-      } else {
-        router.push(`/dashboard/forms/${params.id}`);
-      }
-    } catch (error) {
-      console.error('Error al guardar el checklist:', error);
+    );
+    router.refresh();
+    if (resetQrSelection) {
+      resetQrSelection('');
+    } else {
+      router.push(`/dashboard/forms/${params.id}`);
     }
   };
 
@@ -387,6 +446,7 @@ export default function CheckListVehicular({
   const chequeoSalida = vehicleChecklistConfig.items.filter((item) => item.group === 'chequeoSalida');
   const chequeoEntrada = vehicleChecklistConfig.items.filter((item) => item.group === 'chequeoEntrada');
   const adicionales = vehicleChecklistConfig.items.filter((item) => item.group === 'adicionales');
+  const [tab, setTab] = useState<'salida' | 'entrada'>('salida');
 
   return (
     <Card className="w-full mx-auto mb-6">
@@ -483,9 +543,61 @@ export default function CheckListVehicular({
                     </FormItem>
                   )}
                 />
+                <FormField
+                  control={form.control}
+                  name="chofer"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-col gap-2">
+                      <FormLabel>Conductor</FormLabel>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            disabled={defaultAnswer?.length || default_equipment_id ? true : false}
+                            variant="outline"
+                            role="combobox"
+                            className={cn('justify-between', !field.value && 'text-muted-foreground')}
+                          >
+                            {field.value
+                              ? employees?.find((employee) => employee.value === field.value)?.label
+                              : 'Seleccionar conductor'}
+                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="p-0 w-full">
+                          <Command>
+                            <CommandInput placeholder="Buscar conductor" />
+                            <CommandList>
+                              <CommandEmpty>Sin resultados</CommandEmpty>
+                              <CommandGroup>
+                                {employees?.map((employee) => (
+                                  <CommandItem
+                                    key={employee.value}
+                                    value={employee.label}
+                                    onSelect={() => {
+                                      form.setValue('chofer', employee.value);
+                                    }}
+                                  >
+                                    <Check
+                                      className={cn(
+                                        'mr-2 h-4 w-4',
+                                        employee.value === field.value ? 'opacity-100' : 'opacity-0'
+                                      )}
+                                    />
+                                    {employee.label}
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
                 {general
-                  .filter((item) => item.id !== 'movil')
+                  .filter((item) => item.id !== 'movil' && item.id !== 'chofer')
                   .map((item) => (
                     <FormField
                       key={item.id}
@@ -495,12 +607,29 @@ export default function CheckListVehicular({
                         <FormItem>
                           <FormLabel>{item.label}</FormLabel>
                           <FormControl>
-                            {item.type === 'date' || item.type === 'text' ? (
-                              <Input
-                                type={item.type === 'date' ? 'date' : 'text'}
-                                disabled={item.disabled || (defaultAnswer?.length ?? 0) > 0}
-                                {...field}
-                              />
+                            {item.type === 'date' ? (
+                              <Input type="date" disabled={item.disabled || !isEmpty} {...field} />
+                            ) : item.type === 'text' && item.id.toLowerCase().includes('hora') ? (
+                              <Input type="time" disabled={item.disabled || !isEmpty} {...field} />
+                            ) : item.type === 'text' ? (
+                              <Input disabled={item.disabled || !isEmpty} {...field} />
+                            ) : item.type === 'select' ? (
+                              <Select
+                                onValueChange={field.onChange}
+                                defaultValue={field.value}
+                                disabled={item.disabled || !isEmpty}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Seleccionar" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {item.options?.map((option) => (
+                                    <SelectItem key={option} value={option}>
+                                      {option}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
                             ) : null}
                           </FormControl>
                           <FormMessage />
@@ -512,7 +641,8 @@ export default function CheckListVehicular({
             </div>
 
             {/* Tabs para salida/entrada */}
-            <Tabs defaultValue="salida">
+
+            <Tabs value={tab} onValueChange={(value) => setTab(value as 'salida' | 'entrada')} defaultValue="salida">
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="salida">Chequeo de Salida</TabsTrigger>
                 <TabsTrigger value="entrada">Chequeo de Entrada</TabsTrigger>
@@ -531,18 +661,16 @@ export default function CheckListVehicular({
                           <FormLabel>{item.label}</FormLabel>
                           <FormControl>
                             {item.type === 'date' ? (
-                              <Input
-                                type="date"
-                                disabled={item.disabled || (defaultAnswer?.length ?? 0) > 0}
-                                {...field}
-                              />
+                              <Input type="date" disabled={item.disabled || !isEmpty} {...field} />
+                            ) : item.type === 'text' && item.id.toLowerCase().includes('hora') ? (
+                              <Input type="time" disabled={item.disabled || !isEmpty} {...field} />
                             ) : item.type === 'text' ? (
-                              <Input disabled={item.disabled || (defaultAnswer?.length ?? 0) > 0} {...field} />
+                              <Input disabled={item.disabled || !isEmpty} {...field} />
                             ) : item.type === 'select' ? (
                               <Select
                                 onValueChange={field.onChange}
                                 defaultValue={field.value}
-                                disabled={item.disabled || (defaultAnswer?.length ?? 0) > 0}
+                                disabled={item.disabled || !isEmpty}
                               >
                                 <SelectTrigger>
                                   <SelectValue placeholder="Seleccionar" />
@@ -576,7 +704,7 @@ export default function CheckListVehicular({
                           <FormLabel>{item.label}</FormLabel>
                           <FormControl>
                             <RadioGroup
-                              disabled={item.disabled || (defaultAnswer?.length ?? 0) > 0}
+                              disabled={item.disabled || !isEmpty}
                               onValueChange={field.onChange}
                               defaultValue={field.value}
                               className="flex space-x-4"
@@ -601,6 +729,12 @@ export default function CheckListVehicular({
 
               {/* Tab de Entrada */}
               <TabsContent value="entrada" className="space-y-4 mt-4">
+                {!isOnlySalida && !isCompleto && (
+                  <CardDescription className="flex items-center mb-4 text-blue-600">
+                    <InfoCircledIcon className="text-blue-600 mr-2 size-4" />
+                    Estos campos estan deshabilitados hasta relizar el chequeo de salida
+                  </CardDescription>
+                )}
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                   {datosEntrada.map((item) => (
                     <FormField
@@ -612,18 +746,16 @@ export default function CheckListVehicular({
                           <FormLabel>{item.label}</FormLabel>
                           <FormControl>
                             {item.type === 'date' ? (
-                              <Input
-                                type="date"
-                                disabled={item.disabled || (defaultAnswer?.length ?? 0) > 0}
-                                {...field}
-                              />
+                              <Input type="date" disabled={item.disabled || !isOnlySalida} {...field} />
+                            ) : item.type === 'text' && item.id.toLowerCase().includes('hora') ? (
+                              <Input type="time" disabled={item.disabled || !isOnlySalida} {...field} />
                             ) : item.type === 'text' ? (
-                              <Input disabled={item.disabled || (defaultAnswer?.length ?? 0) > 0} {...field} />
+                              <Input disabled={item.disabled || !isOnlySalida} {...field} />
                             ) : item.type === 'select' ? (
                               <Select
                                 onValueChange={field.onChange}
                                 defaultValue={field.value}
-                                disabled={item.disabled || (defaultAnswer?.length ?? 0) > 0}
+                                disabled={item.disabled || !isOnlySalida}
                               >
                                 <SelectTrigger>
                                   <SelectValue placeholder="Seleccionar" />
@@ -657,7 +789,7 @@ export default function CheckListVehicular({
                           <FormLabel>{item.label}</FormLabel>
                           <FormControl>
                             <RadioGroup
-                              disabled={item.disabled || (defaultAnswer?.length ?? 0) > 0}
+                              disabled={item.disabled || !isOnlySalida}
                               onValueChange={field.onChange}
                               defaultValue={field.value}
                               className="flex space-x-4"
@@ -685,57 +817,50 @@ export default function CheckListVehicular({
             <div className="space-y-4">
               <h3 className="text-lg font-semibold">Información Adicional</h3>
 
-              <FormField
-                control={form.control}
-                name="observaciones"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{adicionales.find((i) => i.id === 'observaciones')?.label}</FormLabel>
-                    <FormControl>
-                      <Textarea disabled={(defaultAnswer?.length ?? 0) > 0} className="min-h-[100px]" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              {/* Observaciones Salida */}
+              {tab === 'salida' && (
+                <FormField
+                  control={form.control}
+                  name="observacionesSalida"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Observaciones de Salida</FormLabel>
+                      <FormControl>
+                        <Textarea disabled={!isEmpty} className="min-h-[100px]" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+              {/* Observaciones Entrada */}
+              {tab === 'entrada' && (
+                <FormField
+                  control={form.control}
+                  name="observacionesEntrada"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Observaciones de Entrada</FormLabel>
+                      <FormControl>
+                        <Textarea disabled={isEmpty || isCompleto} className="min-h-[100px]" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                {/* Columna izquierda - Inspección */}
-                <div className="space-y-4">
-                  <h4 className="font-medium">Inspección</h4>
-                  <FormField
-                    control={form.control}
-                    name="inspeccionadoPor"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Inspeccionado por</FormLabel>
-                        <FormControl>
-                          <Input disabled={(defaultAnswer?.length ?? 0) > 0} {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <div className="grid grid-cols-2 gap-4">
+                {/* Columna izquierda - Inspección solo en Salida */}
+                {tab === 'salida' && (
+                  <div className="space-y-4">
+                    <h4 className="font-medium">Inspección</h4>
                     <FormField
                       control={form.control}
-                      name="fechaInspeccion"
+                      name="inspeccionadoPor"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Fecha</FormLabel>
-                          <FormControl>
-                            <Input type="date" disabled={(defaultAnswer?.length ?? 0) > 0} {...field} />
-                          </FormControl>{' '}
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="horaInspeccion"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Hora</FormLabel>
+                          <FormLabel>Inspeccionado por</FormLabel>
                           <FormControl>
                             <Input disabled={(defaultAnswer?.length ?? 0) > 0} {...field} />
                           </FormControl>
@@ -743,59 +868,89 @@ export default function CheckListVehicular({
                         </FormItem>
                       )}
                     />
+                    <div className="grid grid-cols-2 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="fechaInspeccion"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Fecha</FormLabel>
+                            <FormControl>
+                              <Input type="date" disabled={(defaultAnswer?.length ?? 0) > 0} {...field} />
+                            </FormControl>{' '}
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="horaInspeccion"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Hora</FormLabel>
+                            <FormControl>
+                              <Input type="time" disabled={(defaultAnswer?.length ?? 0) > 0} {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
                   </div>
-                </div>
+                )}
 
-                {/* Columna derecha - Recepción */}
-                <div className="space-y-4">
-                  <h4 className="font-medium">Recepción</h4>
-                  <FormField
-                    control={form.control}
-                    name="recibidoPor"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Recibido por</FormLabel>
-                        <FormControl>
-                          <Input disabled={(defaultAnswer?.length ?? 0) > 0} {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <div className="grid grid-cols-2 gap-4">
+                {/* Columna derecha - Recepción solo en Entrada */}
+                {tab === 'entrada' && (
+                  <div className="space-y-4">
+                    <h4 className="font-medium">Recepción</h4>
                     <FormField
                       control={form.control}
-                      name="fechaRecepcion"
+                      name="recibidoPor"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Fecha</FormLabel>
+                          <FormLabel>Recibido por</FormLabel>
                           <FormControl>
-                            <Input type="date" disabled={(defaultAnswer?.length ?? 0) > 0} {...field} />
+                            <Input disabled={isEmpty || isCompleto} {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
-                    <FormField
-                      control={form.control}
-                      name="horaRecepcion"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Hora</FormLabel>
-                          <FormControl>
-                            <Input disabled={(defaultAnswer?.length ?? 0) > 0} {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                    <div className="grid grid-cols-2 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="fechaRecepcion"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Fecha</FormLabel>
+                            <FormControl>
+                              <Input type="date" disabled={isEmpty || isCompleto} {...field} />
+                            </FormControl>{' '}
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="horaRecepcion"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Hora</FormLabel>
+                            <FormControl>
+                              <Input type="time" disabled={isEmpty || isCompleto} {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             </div>
 
             {/* Botón de guardar (mostrar solo si no es una vista de checklist existente) */}
-            {!defaultAnswer?.length && (
+            {!isCompleto && (
               <div className="flex justify-end">
                 <Button type="submit">Guardar Checklist</Button>
               </div>

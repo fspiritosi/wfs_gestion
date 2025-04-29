@@ -1,4 +1,4 @@
-import { fetchAllEquipment, fetchCustomForms } from '@/app/server/GET/actions';
+import { fetchAllEmployees, fetchAllEquipment, fetchCustomForms } from '@/app/server/GET/actions';
 import QrActionSelector from '@/components/QR/AcctionSelector';
 import { supabaseServer } from '@/lib/supabase/server';
 import { setVehiclesToShow } from '@/lib/utils/utils';
@@ -78,10 +78,16 @@ export default async function Home({
   console.log(role, 'role');
   console.log(checklists, 'checklists');
 
+  const employees = (await fetchAllEmployees()).map((employee) => ({
+    label: employee.firstname + ' ' + employee.lastname,
+    value: employee.id,
+  }));
+  
   // console.log(currentEquipment, 'currentEquipment');
   return (
     <QrActionSelector
       user={user}
+      employees={employees}
       employee_id={employee}
       equipment={vehiclesFormatted}
       tipo_de_mantenimiento={types_of_repairs as TypeOfRepair}

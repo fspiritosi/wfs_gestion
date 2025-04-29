@@ -1,4 +1,4 @@
-import { fetchAllEquipment, fetchCustomFormById, getCurrentProfile } from '@/app/server/GET/actions';
+import { fetchAllEmployees, fetchAllEquipment, fetchCustomFormById, getCurrentProfile } from '@/app/server/GET/actions';
 import { dailyChecklistConfig } from '@/components/CheckList/DynamicChecklistForm';
 import DynamicFormWrapper from '@/components/CheckList/DynamicFormWrapper';
 
@@ -16,6 +16,11 @@ async function page({ params }: { params: { id: string } }) {
     intern_number: equipment.intern_number,
   }));
 
+  const employees = (await fetchAllEmployees()).map((employee) => ({
+    label: employee.firstname + ' ' + employee.lastname,
+    value: employee.id,
+  }));
+
   // console.log('params', params);
 
   const currentUser = await getCurrentProfile();
@@ -27,6 +32,7 @@ async function page({ params }: { params: { id: string } }) {
       <DynamicFormWrapper
         formType={formInfo?.[0].name as any} // or "dynamic"
         equipments={equipments}
+        employees={employees}
         currentUser={currentUser}
         form_Info={formInfo}
         dynamicFormConfig={dailyChecklistConfig} // Pass your dynamic form configuration here

@@ -28,6 +28,7 @@ export default function QrActionSelector({
   pendingRequests,
   checkList,
   equipmentsForComboBox,
+  employees
 }: {
   empleado_name: string | undefined;
   user: User | null;
@@ -38,6 +39,10 @@ export default function QrActionSelector({
   role: string | undefined;
   pendingRequests: RepairsSolicituds;
   checkList: CheckListWithAnswer[];
+  employees: {
+    label: string;
+    value: string;
+  }[];
   equipmentsForComboBox: {
     label: string;
     value: string;
@@ -93,6 +98,7 @@ export default function QrActionSelector({
         equipmentsForComboBox={equipmentsForComboBox}
         checkList={checkList}
         onReturn={handleReturn}
+        employees={employees}
       />
     );
   }

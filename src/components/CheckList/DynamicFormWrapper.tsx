@@ -36,11 +36,16 @@ interface DynamicFormWrapperProps {
   default_equipment_id?: string;
   empleado_name?: string | undefined;
   singurl?: string | null;
+  employees:{
+    label:string,
+    value:string
+  }[]
 }
 
 export default function DynamicFormWrapper({
   formType,
   equipments,
+  employees,
   currentUser,
   defaultAnswer,
   form_Info,
@@ -67,6 +72,7 @@ export default function DynamicFormWrapper({
             default_equipment_id={default_equipment_id}
             empleado_name={empleado_name}
             singurl={singurl ||''}
+            employees={employees}
           />
         );
 

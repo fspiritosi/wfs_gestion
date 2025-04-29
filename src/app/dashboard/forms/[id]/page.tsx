@@ -1,4 +1,4 @@
-import { fetchCustomFormById, fetchFormsAnswersByFormId } from '@/app/server/GET/actions';
+import { fetchAllEmployees, fetchCustomFormById, fetchFormsAnswersByFormId } from '@/app/server/GET/actions';
 import BackButton from '@/components/BackButton';
 import Viewcomponent from '@/components/ViewComponent';
 import { PDFPreviewDialog } from '@/components/pdf-preview-dialog';
@@ -6,6 +6,7 @@ import { PDFPreviewDialog } from '@/components/pdf-preview-dialog';
 import { TransporteSPANAYCHKHYS01 } from '@/components/pdf/generators/TransporteSPANAYCHKHYS01';
 import { TransporteSPANAYCHKHYS03 } from '@/components/pdf/generators/TransporteSPANAYCHKHYS03';
 import { TransporteSPANAYCHKHYS04 } from '@/components/pdf/generators/TransporteSPANAYCHKHYS04';
+import { CheckListVehicularPDF } from '@/components/pdf/generators/CheckListVehicularPDF';
 import { buttonVariants } from '@/components/ui/button';
 import Link from 'next/link';
 import CheckListAnwersTable from '../components/CheckListAnwersTable';
@@ -18,6 +19,9 @@ const renderForm = (activeFormType: string) => {
       return <TransporteSPANAYCHKHYS03 title="CHECK LIST INSPECCION VEHICULAR" description="Pdf vacio" preview />;
     case 'Transporte SP-ANAY - CHK - HYS - 04':
       return <TransporteSPANAYCHKHYS04 title="INSPERCION DIARIA DE VEHICULO" description="Pdf vacio" preview />;
+
+    case 'CHECK LIST VEHICULAR':
+      return <CheckListVehicularPDF title="CHECK LIST VEHICULAR" description="Pdf vacio" preview />;
     default:
       return <div>No hay formulario seleccionado</div>;
   }
@@ -27,6 +31,7 @@ async function page({ params }: { params: { id: string } }) {
   const answers = await fetchFormsAnswersByFormId(params.id);
   const formInfo = await fetchCustomFormById(params.id);
   const formName = formInfo[0].name;
+  const employees = await fetchAllEmployees();
 
   const viewData = {
     defaultValue: 'anwers',
@@ -54,7 +59,7 @@ async function page({ params }: { params: { id: string } }) {
           title: formName,
           description: `${(answers[0]?.form_id?.form as any)?.description ?? ''}`,
           buttonActioRestricted: [''],
-          component: <CheckListAnwersTable answers={answers} />,
+          component: <CheckListAnwersTable answers={answers} employees={employees} />,
         },
       },
     ],

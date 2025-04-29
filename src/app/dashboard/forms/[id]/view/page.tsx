@@ -1,4 +1,5 @@
 import {
+  fetchAllEmployees,
   fetchAllEquipment,
   fetchAnswerById,
   fetchSingEmployee,
@@ -32,7 +33,11 @@ async function page({ params }: { params: { id: string } }) {
     }
   }
 
-
+  const employees = (await fetchAllEmployees()).map((employee) => ({
+    label: employee.firstname + ' ' + employee.lastname,
+    value: employee.id,
+  }));
+  
   return (
     <div className="px-7">
       <DynamicFormWrapper
@@ -41,6 +46,7 @@ async function page({ params }: { params: { id: string } }) {
         form_Info={[answer[0]?.form_id]}
         defaultAnswer={answer}
         singurl={singurl}
+        employees={employees}
       />
     </div>
   );

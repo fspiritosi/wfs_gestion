@@ -1,9 +1,9 @@
 'use client';
 
-import { PDFPreviewDialog } from '@/components/pdf-preview-dialog';
-import { TransporteSPANAYCHKHYS04 } from '@/components/pdf/generators/TransporteSPANAYCHKHYS04';
-import { PersonIcon } from '@radix-ui/react-icons';
+import { Badge } from '@/components/ui/badge';
+import { InfoCircledIcon, PersonIcon } from '@radix-ui/react-icons';
 import { ColumnDef } from '@tanstack/react-table';
+import { AlertCircle } from 'lucide-react';
 import moment from 'moment';
 import { DataTableColumnHeader } from './data-table-column-header';
 
@@ -57,7 +57,14 @@ export const checkListAnswerColumns: ColumnDef<{
     id: 'Kilometraje',
     header: ({ column }) => <DataTableColumnHeader column={column} title="Kilometraje" />,
     cell: ({ row }) => {
-      return <div className="flex w-[100px] items-center">{row.getValue('Kilometraje')}</div>;
+      const kilometraje = row.getValue('Kilometraje') as string;
+      if (kilometraje) {
+
+        return <div className="flex w-[150px] items-center">{kilometraje}</div>;
+      }else{
+        return <Badge className="w-[150px]"><InfoCircledIcon className="mr-1 text-white size-4" />No registrado</Badge>
+
+      }
     },
   },
   {
@@ -75,30 +82,49 @@ export const checkListAnswerColumns: ColumnDef<{
       return value.includes(row.getValue(id));
     },
   },
-  // {
-  //   id: 'actions',
-  //   cell: ({ row }) => {
-  //     return (
-  //       <PDFPreviewDialog
-  //         title="Inspección Diaria de Vehículo"
-  //         description={`Conductor: ${row.original.chofer || 'No especificado'} - Vehículo: ${row.original.domain || 'No especificado'}`}
-  //         buttonText="Ver PDF"
-  //         className="ml-auto"
-  //       >
-  //         <div className="h-full w-full bg-white">
-  //           <TransporteSPANAYCHKHYS04
-  //             data={{
-  //               movil: row.original.domain,
-  //               kilometraje: row.original.kilometer,
-  //               fecha: row.original.created_at,
-  //               ...row.original,
-  //               chofer: row.original.chofer,
-  //             }}
-  //             preview={true}
-  //           />
-  //         </div>
-  //       </PDFPreviewDialog>
-  //     );
-  //   },
+  {
+    accessorKey: 'inspeccionadoPor',
+    id: 'Inspeccionado por',
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Inspeccionado por" />,
+    cell: ({ row }) => {
+      return (
+        <div className="flex  items-center">
+          <PersonIcon className="mr-1 text-gray-600" />
+          {row.getValue('Inspeccionado por')}
+        </div>
+      );
+    },
+    filterFn: (row, id, value) => {
+      return value.includes(row.getValue(id));
+    },
+  },
+  {
+    accessorKey: 'recibidoPor',
+    id: 'Recibido por',
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Recibido por" />,
+    cell: ({ row }) => {
+
+      const recibidoPor =row.getValue('Recibido por')
+
+      if(!recibidoPor){
+        return(
+          <div className="flex">
+            <Badge className=""> <AlertCircle className="mr-1 text-white size-4" />Pendiente</Badge>
+          </div>
+        )
+      }
+
+      return (
+        <div className="flex  items-center">
+          <PersonIcon className="mr-1 text-gray-600" />
+          {row.getValue('Recibido por')}
+        </div>
+      );
+    },
+    filterFn: (row, id, value) => {
+      return value.includes(row.getValue(id));
+    },
+  },
+
   
 ];
