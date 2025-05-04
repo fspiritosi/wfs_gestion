@@ -397,6 +397,7 @@ export function EditModal({ Equipo, employeeMockValues, vehicleMockValues, emplo
     }
   }
   const [existingEntries, setExistingEntries] = useState<any[]>([]);
+  const [selectedDeleteMode, setSelectedDeleteMode] = useState<'all' | 'nonMatching'>('all');
 
   async function fettchExistingEntries() {
     const tableNames = {
@@ -501,24 +502,57 @@ export function EditModal({ Equipo, employeeMockValues, vehicleMockValues, emplo
 
     toast.promise(
       async () => {
-        const { data, error } = await supabase
-          .from(table as any)
-          .delete()
-          .eq('id_document_types', Equipo.id)
-          .is('document_path', null);
-        console.log(data, 'data');
-        console.log(error, 'error');
+        // Si es un documento especial y el modo es 'nonMatching', solo eliminar las alertas que no cumplen con las condiciones
+        if (Equipo.special && selectedDeleteMode === 'nonMatching') {
+          // Identificar recursos que no cumplen con las condiciones actuales
+          const matchingIds =
+            Equipo.applies === 'Persona'
+              ? matchingEmployees.map((e) => e.id)
+              : matchingVehicles.map((v) => v.id);
 
-        if (error) {
-          throw new Error(handleSupabaseError(error.message));
+          // Obtener IDs de recursos con alertas que NO están en la lista de matching
+          const nonMatchingResourceIds = existingEntries
+            .filter((entry) => !matchingIds.includes(entry.applies.id))
+            .map((entry) => entry.id);
+
+          if (nonMatchingResourceIds.length === 0) {
+            throw new Error('No hay alertas para eliminar que no cumplan con las condiciones actuales');
+          }
+
+          // Eliminar solo las alertas de recursos que no cumplen con las condiciones actuales
+          const { error } = await supabase
+            .from(table as any)
+            .delete()
+            .in('id', nonMatchingResourceIds)
+            .is('document_path', null);
+
+          if (error) {
+            throw new Error(handleSupabaseError(error.message));
+          }
+        } else {
+          // Comportamiento original: eliminar todas las alertas
+          const { error } = await supabase
+            .from(table as any)
+            .delete()
+            .eq('id_document_types', Equipo.id)
+            .is('document_path', null);
+
+          if (error) {
+            throw new Error(handleSupabaseError(error.message));
+          }
         }
+
+        // Actualizar la lista de entradas existentes después de eliminar
+        await fettchExistingEntries();
       },
       {
-        loading: 'Eliminando...',
+        loading: 'Eliminando alertas...',
         success: (data) => {
           fetchDocumentTypes(actualCompany?.id);
           router.refresh();
-          return 'Se han eliminado las alertas!';
+          return selectedDeleteMode === 'nonMatching'
+            ? 'Se han eliminado las alertas que no cumplen con las condiciones actuales!'
+            : 'Se han eliminado todas las alertas!';
         },
         error: (error) => {
           return error;
@@ -526,6 +560,7 @@ export function EditModal({ Equipo, employeeMockValues, vehicleMockValues, emplo
       }
     );
   }
+
   // 2. Función que filtra empleados según las condiciones
   function filterEmployeesByConditions(empleados: any[], condiciones: any[], propConfig: any[]) {
     // Si no hay condiciones, mostrar todos los empleados
@@ -1059,25 +1094,192 @@ export function EditModal({ Equipo, employeeMockValues, vehicleMockValues, emplo
                 Eliminar alertas
               </Button>
             </AlertDialogTrigger>
-            <AlertDialogContent>
+            <AlertDialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <AlertDialogHeader>
-                <AlertDialogTitle>Estas totalmente seguro?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  Esta acción eliminará la alerta de todos los recursos a los que no se les haya subido el documento.
-                  Los documentos ya subidos y vinculados a este tipo de documento permanecerán intactos.
-                </AlertDialogDescription>
+                <AlertDialogTitle>Eliminación de alertas</AlertDialogTitle>
+                  {!Equipo.special ? (
+                  // Modal para documentos NO especiales (funcionalidad original)
+                  <>
+                    <AlertDialogDescription>
+                      Esta acción eliminará la alerta de todos los recursos a los que no se les haya subido el documento.
+                      Los documentos ya subidos y vinculados a este tipo de documento permanecerán intactos.
+                    </AlertDialogDescription>
+                    <div className="mt-4">
+                      {existingEntries.length > 0 ? (
+                        <ScrollArea className="h-48">
+                          <div className="p-4 border rounded-md">
+                            <CardTitle className="text-md mb-3">Recursos con alertas pendientes:</CardTitle>
+                            {existingEntries.map((entry) => {
+                              const resource = entry.applies;
+                              if (Equipo.applies === 'Equipos') {
+                                return (
+                                  <div key={resource.id} className="py-1">
+                                    {resource.domain} {resource.serie} - {resource.intern_number}
+                                  </div>
+                                );
+                              }
+                              if (Equipo.applies === 'Persona') {
+                                return (
+                                  <div key={resource.id} className="py-1">
+                                    {resource.lastname} {resource.firstname} - {resource.cuil}
+                                  </div>
+                                );
+                              }
+                            })}
+                          </div>
+                        </ScrollArea>
+                      ) : (
+                        <div className="p-4 border rounded-md text-center">
+                          No hay alertas pendientes para eliminar
+                        </div>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  // Modal para documentos especiales (nuevo diseño de dos columnas)
+                  <>
+                    <AlertDialogDescription className="mb-4">
+                      Seleccione qué alertas desea eliminar. Puede ver el listado completo o solo los recursos que ya no cumplen con las condiciones definidas.
+                    </AlertDialogDescription>
+                    
+                    {/* Botones de selección de modo */}
+                    <div className="flex gap-4 mb-4 justify-center">
+                      <Button 
+                        variant={selectedDeleteMode === 'all' ? "destructive" : "outline"}
+                        onClick={() => setSelectedDeleteMode('all')}
+                        disabled={existingEntries.length === 0}
+                        className="flex-1"
+                      >
+                        Eliminar todas ({existingEntries.length})
+                      </Button>
+                      
+                      {(() => {
+                        const matchingIds = Equipo.applies === 'Persona' 
+                          ? matchingEmployees.map(e => e.id) 
+                          : matchingVehicles.map(v => v.id);
+                        
+                        const nonMatchingEntries = existingEntries.filter(
+                          entry => !matchingIds.includes(entry.applies.id)
+                        );
+                        
+                        return (
+                          <Button 
+                            variant={selectedDeleteMode === 'nonMatching' ? "destructive" : "outline"}
+                            onClick={() => setSelectedDeleteMode('nonMatching')}
+                            disabled={nonMatchingEntries.length === 0}
+                            className="flex-1"
+                          >
+                            Eliminar fuera de condiciones ({nonMatchingEntries.length})
+                          </Button>
+                        );
+                      })()}
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      {/* Columna 1: Todos los recursos con alertas */}
+                      <div>
+                        <Accordion type="single" collapsible className="w-full" defaultValue="all-resources">
+                          <AccordionItem value="all-resources">
+                            <AccordionTrigger className="font-semibold">
+                              Todos los recursos ({existingEntries.length})
+                            </AccordionTrigger>
+                            <AccordionContent>
+                              <ScrollArea className="h-48 mt-2">
+                                <div className="p-2">
+                                  {existingEntries.length > 0 ? (
+                                    existingEntries.map((entry) => {
+                                      const resource = entry.applies;
+                                      if (Equipo.applies === 'Equipos') {
+                                        return (
+                                          <div key={resource.id} className="py-1">
+                                            {resource.domain} {resource.serie} - {resource.intern_number}
+                                          </div>
+                                        );
+                                      }
+                                      if (Equipo.applies === 'Persona') {
+                                        return (
+                                          <div key={resource.id} className="py-1">
+                                            {resource.lastname} {resource.firstname} - {resource.cuil}
+                                          </div>
+                                        );
+                                      }
+                                    })
+                                  ) : (
+                                    <div className="text-center py-4">No hay alertas para mostrar</div>
+                                  )}
+                                </div>
+                              </ScrollArea>
+                            </AccordionContent>
+                          </AccordionItem>
+                        </Accordion>
+                      </div>
+
+                      {/* Columna 2: Recursos que no cumplen con las condiciones actuales */}
+                      <div>
+                        {(() => {
+                          const matchingIds = 
+                            Equipo.applies === 'Persona' 
+                              ? matchingEmployees.map(e => e.id) 
+                              : matchingVehicles.map(v => v.id);
+                          
+                          const nonMatchingEntries = existingEntries.filter(
+                            entry => !matchingIds.includes(entry.applies.id)
+                          );
+
+                          return (
+                            <Accordion type="single" collapsible className="w-full" defaultValue="non-matching">
+                              <AccordionItem value="non-matching">
+                                <AccordionTrigger className="font-semibold">
+                                  Recursos fuera de condiciones ({nonMatchingEntries.length})
+                                </AccordionTrigger>
+                                <AccordionContent>
+                                  <ScrollArea className="h-48 mt-2">
+                                    <div className="p-2">
+                                      {nonMatchingEntries.length > 0 ? (
+                                        nonMatchingEntries.map((entry) => {
+                                          const resource = entry.applies;
+                                          if (Equipo.applies === 'Equipos') {
+                                            return (
+                                              <div key={resource.id} className="py-1">
+                                                {resource.domain} {resource.serie} - {resource.intern_number}
+                                              </div>
+                                            );
+                                          }
+                                          if (Equipo.applies === 'Persona') {
+                                            return (
+                                              <div key={resource.id} className="py-1">
+                                                {resource.lastname} {resource.firstname} - {resource.cuil}
+                                              </div>
+                                            );
+                                          }
+                                        })
+                                      ) : (
+                                        <div className="text-center py-4">Todos los recursos con alertas cumplen las condiciones actuales</div>
+                                      )}
+                                    </div>
+                                  </ScrollArea>
+                                </AccordionContent>
+                              </AccordionItem>
+                            </Accordion>
+                          );
+                        })()} 
+                      </div>
+                    </div>
+                  </>
+                )}
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                <AlertDialogAction className={buttonVariants({ variant: 'destructive' })} asChild>
-                  <Button variant={'destructive'} onClick={() => handleDeleteAlerts()}>
-                    Eliminar alertas
-                  </Button>
-                </AlertDialogAction>
+                {!Equipo.special && (
+                  <AlertDialogAction className={buttonVariants({ variant: 'destructive' })} asChild>
+                    <Button variant={'destructive'} onClick={() => handleDeleteAlerts()}>
+                      Eliminar todas las alertas
+                    </Button>
+                  </AlertDialogAction>
+                )}
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
-
           <AlertDialog>
             <AlertDialogTrigger disabled={!(resourcesToInsert.length > 0) || Equipo.applies === 'Empresa'} asChild>
               <Button className="self-end">
