@@ -1,7 +1,7 @@
 // Layout PDF para CHECK LIST VEHICULAR
 'use client';
 
-import { Document, Image, Page, Rect, StyleSheet, Svg, Text, View } from '@react-pdf/renderer';
+import { Document, Image, Line, Page, Rect, StyleSheet, Svg, Text, View } from '@react-pdf/renderer';
 
 interface CheckListVehicularLayoutProps {
   title?: string;
@@ -21,6 +21,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Helvetica',
     position: 'relative',
   },
+
   border: {
     position: 'absolute',
     top: 30,
@@ -181,9 +182,15 @@ const styles = StyleSheet.create({
 });
 
 // SVG cuadrado para usar como checkbox
-const SquareCheckBox = () => (
+const SquareCheckBoxWithX = ({ checked = false }: { checked?: boolean }) => (
   <Svg width={10} height={10} style={{ marginHorizontal: 2 }}>
     <Rect x={0.5} y={0.5} width={9} height={9} stroke="#000" strokeWidth={1} fill="none" />
+    {checked && (
+      <>
+        <Line x1={2} y1={2} x2={8} y2={8} stroke="#000" strokeWidth={1} />
+        <Line x1={8} y1={2} x2={2} y2={8} stroke="#000" strokeWidth={1} />
+      </>
+    )}
   </Svg>
 );
 
@@ -198,10 +205,19 @@ export const CheckListVehicularLayout = ({
   entrada,
 }: CheckListVehicularLayoutProps) => {
   // Utilidades para checkboxes vacíos
-  // const checkbox = '□';
 
-  // Helper para obtener valor o checkbox vacío
-  const renderCheckbox = (checked: boolean) => (checked ? '■' : <SquareCheckBox />);
+  // Helper para normalizar el estado de los ítems
+  function getEstado(val?: string) {
+    if (!val) return null;
+    const v = val.trim().toUpperCase();
+    if (v === 'B' || v === 'BUENO') return 'B';
+    if (v === 'M' || v === 'MALO') return 'M';
+    return null;
+  }
+
+  console.log('salida', salida);
+  console.log('entrada', entrada);
+  console.log('adicionales', adicionales);
 
   // Separar campos de fecha/hora/combustible de los ítems de chequeo
   const salidaFecha = salida.find((i) => i.label.toLowerCase().includes('fecha'))?.value || '';
@@ -231,7 +247,11 @@ export const CheckListVehicularLayout = ({
   const horaInspeccion = adicionales.find((i) => i.label.toLowerCase().includes('hora inspección'))?.value || '';
   const fechaRecepcion = adicionales.find((i) => i.label.toLowerCase().includes('fecha recepción'))?.value || '';
   const horaRecepcion = adicionales.find((i) => i.label.toLowerCase().includes('hora recepción'))?.value || '';
-
+  const observacionesEntrada =
+    adicionales.find((i) => i.label.toLowerCase().includes('observación entrada'))?.value || '';
+  const observacionesSalida =
+    adicionales.find((i) => i.label.toLowerCase().includes('observación salida'))?.value || '';
+  // Observación Salida
   return (
     <Document>
       <Page size="A4" style={styles.page}>
@@ -245,7 +265,7 @@ export const CheckListVehicularLayout = ({
             </View>
           </View>
           {/* Tabla superior tipo formulario */}
-          <View style={{ border: '1pt solid #000', marginBottom: 6 }}>
+          <View style={{ border: '1pt solid #000', marginBottom: 8 }}>
             {/* Fila 1: FECHA y OBRA */}
             <View style={{ flexDirection: 'row' }}>
               {/* FECHA label */}
@@ -299,7 +319,15 @@ export const CheckListVehicularLayout = ({
               {/* VEHICULO valor */}
               <View style={{ flex: 1, borderRight: '1pt solid #000', justifyContent: 'center', minHeight: 18 }}>
                 <Text style={{ marginLeft: 4 }}>
-                  {generales.find((g) => g.label.toLowerCase().includes('vehiculo'))?.value || ''}
+                  {(() => {
+                    const marca = generales.find((g) => g.label.toLowerCase().includes('marca'))?.value;
+                    const modelo = generales.find((g) => g.label.toLowerCase().includes('modelo'))?.value;
+                    const dominio = generales.find((g) => g.label.toLowerCase().includes('dominio'))?.value;
+                    if (marca || modelo || dominio) {
+                      return [marca, modelo, dominio].filter(Boolean).join(' ');
+                    }
+                    return generales.find((g) => g.label.toLowerCase().includes('vehiculo'))?.value || '';
+                  })()}
                 </Text>
               </View>
               {/* CONDUCTOR label */}
@@ -321,12 +349,29 @@ export const CheckListVehicularLayout = ({
               </View>
             </View>
           </View>
+          {/* Tipografica a completar */}
 
+          <View style={styles.terminology}>
+            <Text style={styles.terminologyTitle}>TERMINOLOGIA A UTILIZAR PARA EL LLENADO DEL CHECK</Text>
+            <View style={styles.terminologyOptions}>
+              <Text style={styles.terminologyText}>B: BUENO</Text>
+              <Text style={styles.terminologyText}>M: MALO</Text>
+            </View>
+          </View>
           {/* Chequeo SALIDA y ENTRADA */}
           <View style={{ flexDirection: 'row', gap: 8, marginBottom: 6 }}>
             {/* SALIDA */}
             <View style={{ flex: 1, border: '1pt solid #000' }}>
-              <Text style={{ fontWeight: 'bold', fontSize: 11, backgroundColor: '#d9eaf7', textAlign: 'center' }}>
+              <Text
+                style={{
+                  fontWeight: 'bold',
+                  fontSize: 11,
+                  backgroundColor: '#d9eaf7',
+                  textAlign: 'center',
+                  padding: 4,
+                  borderBottom: '1pt solid #000',
+                }}
+              >
                 CHEQUEO DE SALIDA
               </Text>
               {/* Header tipo formulario para fecha/hora */}
@@ -344,7 +389,7 @@ export const CheckListVehicularLayout = ({
                     <Text style={{ color: '#fff', fontWeight: 'bold', textAlign: 'center', fontSize: 9 }}>Fecha</Text>
                   </View>
                   {/* Fecha valor */}
-                  <View style={{ flex: 1, borderRight: '1pt solid #000', minHeight: 16, justifyContent: 'center' }}>
+                  <View style={{ flex: 1, minHeight: 16, justifyContent: 'center' }}>
                     <Text style={{ marginLeft: 4, fontSize: 9 }}>{salidaFecha}</Text>
                   </View>
                 </View>
@@ -369,56 +414,71 @@ export const CheckListVehicularLayout = ({
                 </View>
               </View>
               {/* Combustible con checkboxes */}
-              <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 2 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 2, padding: 4 }}>
                 <Text style={{ fontSize: 9, marginRight: 2 }}>COMBUSTIBLE :</Text>
                 <Text style={{ fontSize: 9, marginRight: 2 }}>VACÍO</Text>
-                <SquareCheckBox />
+                <SquareCheckBoxWithX checked={salidaCombustible === 'VACÍO'} />
                 <Text style={{ fontSize: 9, marginRight: 2 }}>1/4</Text>
-                <SquareCheckBox />
+                <SquareCheckBoxWithX checked={salidaCombustible === '1/4'} />
                 <Text style={{ fontSize: 9, marginRight: 2 }}>1/2</Text>
-                <SquareCheckBox />
+                <SquareCheckBoxWithX checked={salidaCombustible === '1/2'} />
                 <Text style={{ fontSize: 9, marginRight: 2 }}>3/4</Text>
-                <SquareCheckBox />
+                <SquareCheckBoxWithX checked={salidaCombustible === '3/4'} />
                 <Text style={{ fontSize: 9, marginRight: 2 }}>FULL</Text>
-                <SquareCheckBox />
+                <SquareCheckBoxWithX checked={salidaCombustible === 'FULL'} />
               </View>
               <View style={{ flexDirection: 'row', borderBottom: '1pt solid #000', backgroundColor: '#1155cc' }}>
                 <View style={{ flex: 5, borderRight: '1pt solid #000' }}>
-                  <Text style={{ fontWeight: 'bold', textAlign: 'center' }}>ITEM</Text>
+                  <Text style={{ fontWeight: 'bold', textAlign: 'center', padding: 4 }}>ITEM</Text>
                 </View>
-                <View style={{ flex: 1, borderRight: '1pt solid #000' }}>
-                  <Text style={{ fontWeight: 'bold', textAlign: 'center' }}>BUENO</Text>
+                <View style={{ flex: 0.72, borderRight: '1pt solid #000' }}>
+                  <Text style={{ fontWeight: 'bold', textAlign: 'center', padding: 4 }}>B</Text>
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontWeight: 'bold', textAlign: 'center' }}>MALO</Text>
+                <View style={{ flex: 0.72 }}>
+                  <Text style={{ fontWeight: 'bold', textAlign: 'center', padding: 4 }}>M</Text>
                 </View>
               </View>
-              {salidaItems.map((item, idx) => (
-                <View key={idx} style={{ flexDirection: 'row', borderBottom: '0.5pt solid #bbb', minHeight: 16 }}>
-                  <View style={{ flex: 2, borderRight: '1pt solid #000', justifyContent: 'center' }}>
-                    <Text style={{ fontSize: 9, paddingLeft: 4 }}>{item.label}</Text>
-                  </View>
-                  <View
-                    style={{ flex: 1, minWidth: 20, maxWidth: 28, borderRight: '1pt solid #000', alignItems: 'center' }}
-                  >
-                    <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-                      <SquareCheckBox />
+              {salidaItems.map((item, idx) => {
+                // Se espera que item.value sea 'B', 'M' u otro valor
+                return (
+                  <View key={idx} style={{ flexDirection: 'row', borderBottom: '0.5pt solid #bbb', minHeight: 16 }}>
+                    <View style={{ flex: 2, borderRight: '1pt solid #000', justifyContent: 'center' }}>
+                      <Text style={{ fontSize: 9, paddingLeft: 4 }}>{item.label}</Text>
+                    </View>
+                    <View
+                      style={{
+                        flex: 1,
+                        minWidth: 20,
+                        maxWidth: 28,
+                        borderRight: '1pt solid #000',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+                        <SquareCheckBoxWithX checked={getEstado(item.value) === 'B'} />
+                      </View>
+                    </View>
+                    <View style={{ flex: 1, minWidth: 20, maxWidth: 28, alignItems: 'center' }}>
+                      <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+                        <SquareCheckBoxWithX checked={getEstado(item.value) === 'M'} />
+                      </View>
                     </View>
                   </View>
-                  <View style={{ flex: 1, minWidth: 20, maxWidth: 28, alignItems: 'center' }}>
-                    <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-                      <SquareCheckBox />
-                    </View>
-                  </View>
-                </View>
-              ))}
-              <View style={{ minHeight: 24, borderTop: '1pt solid #000', marginTop: 2, paddingHorizontal: 2 }}>
-                <Text style={{ fontSize: 9 }}>OBSERVACIONES:</Text>
-              </View>
+                );
+              })}
             </View>
             {/* ENTRADA */}
             <View style={{ flex: 1, border: '1pt solid #000' }}>
-              <Text style={{ fontWeight: 'bold', fontSize: 11, backgroundColor: '#d9d9d9', textAlign: 'center' }}>
+              <Text
+                style={{
+                  fontWeight: 'bold',
+                  fontSize: 11,
+                  backgroundColor: '#d9d9d9',
+                  textAlign: 'center',
+                  padding: 4,
+                  borderBottom: '1pt solid #000',
+                }}
+              >
                 CHEQUEO DE ENTRADA
               </Text>
               {/* Header tipo formulario para fecha/hora */}
@@ -433,10 +493,10 @@ export const CheckListVehicularLayout = ({
                       justifyContent: 'center',
                     }}
                   >
-                    <Text style={{ color: '#fff', fontWeight: 'bold', textAlign: 'center', fontSize: 9 }}>Fecha</Text>
+                    <Text style={{ color: '#000', fontWeight: 'bold', textAlign: 'center', fontSize: 9 }}>Fecha</Text>
                   </View>
                   {/* Fecha valor */}
-                  <View style={{ flex: 1, borderRight: '1pt solid #000', minHeight: 16, justifyContent: 'center' }}>
+                  <View style={{ flex: 1, minHeight: 16, justifyContent: 'center' }}>
                     <Text style={{ marginLeft: 4, fontSize: 9 }}>{entradaFecha}</Text>
                   </View>
                 </View>
@@ -450,7 +510,7 @@ export const CheckListVehicularLayout = ({
                       justifyContent: 'center',
                     }}
                   >
-                    <Text style={{ color: '#fff', fontWeight: 'bold', textAlign: 'center', fontSize: 9 }}>
+                    <Text style={{ color: '#000', fontWeight: 'bold', textAlign: 'center', fontSize: 9 }}>
                       Hora Ingreso
                     </Text>
                   </View>
@@ -461,58 +521,147 @@ export const CheckListVehicularLayout = ({
                 </View>
               </View>
               {/* Combustible con checkboxes */}
-              <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 2 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 2, padding: 4 }}>
                 <Text style={{ fontSize: 9, marginRight: 2 }}>COMBUSTIBLE :</Text>
                 <Text style={{ fontSize: 9, marginRight: 2 }}>VACÍO</Text>
-                <SquareCheckBox />
+                <SquareCheckBoxWithX checked={entradaCombustible === 'VACÍO'} />
                 <Text style={{ fontSize: 9, marginRight: 2 }}>1/4</Text>
-                <SquareCheckBox />
+                <SquareCheckBoxWithX checked={entradaCombustible === '1/4'} />
                 <Text style={{ fontSize: 9, marginRight: 2 }}>1/2</Text>
-                <SquareCheckBox />
+                <SquareCheckBoxWithX checked={entradaCombustible === '1/2'} />
                 <Text style={{ fontSize: 9, marginRight: 2 }}>3/4</Text>
-                <SquareCheckBox />
+                <SquareCheckBoxWithX checked={entradaCombustible === '3/4'} />
                 <Text style={{ fontSize: 9, marginRight: 2 }}>FULL</Text>
-                <SquareCheckBox />
+                <SquareCheckBoxWithX checked={entradaCombustible === 'FULL'} />
               </View>
               <View style={{ flexDirection: 'row', borderBottom: '1pt solid #000', backgroundColor: '#1155cc' }}>
                 <View style={{ flex: 5, borderRight: '1pt solid #000' }}>
-                  <Text style={{ fontWeight: 'bold', textAlign: 'center' }}>ITEM</Text>
+                  <Text style={{ fontWeight: 'bold', textAlign: 'center', padding: 4 }}>ITEM</Text>
                 </View>
-                <View style={{ flex: 1, borderRight: '1pt solid #000' }}>
-                  <Text style={{ fontWeight: 'bold', textAlign: 'center' }}>BUENO</Text>
+                <View style={{ flex: 0.72, borderRight: '1pt solid #000' }}>
+                  <Text style={{ fontWeight: 'bold', textAlign: 'center', padding: 4 }}>B</Text>
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontWeight: 'bold', textAlign: 'center' }}>MALO</Text>
+                <View style={{ flex: 0.72 }}>
+                  <Text style={{ fontWeight: 'bold', textAlign: 'center', padding: 4 }}>M</Text>
                 </View>
               </View>
-              {entradaItems.map((item, idx) => (
-                <View key={idx} style={{ flexDirection: 'row', borderBottom: '0.5pt solid #bbb', minHeight: 16 }}>
-                  <View style={{ flex: 2, borderRight: '1pt solid #000', justifyContent: 'center' }}>
-                    <Text style={{ fontSize: 9, paddingLeft: 4 }}>{item.label}</Text>
-                  </View>
-                  <View
-                    style={{ flex: 1, minWidth: 20, maxWidth: 28, borderRight: '1pt solid #000', alignItems: 'center' }}
-                  >
-                    <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-                      <SquareCheckBox />
+              {entradaItems.map((item, idx) => {
+                // Se espera que item.value sea 'B', 'M' u otro valor
+                return (
+                  <View key={idx} style={{ flexDirection: 'row', borderBottom: '0.5pt solid #bbb', minHeight: 16 }}>
+                    <View style={{ flex: 2, borderRight: '1pt solid #000', justifyContent: 'center' }}>
+                      <Text style={{ fontSize: 9, paddingLeft: 4 }}>{item.label}</Text>
+                    </View>
+                    <View
+                      style={{
+                        flex: 1,
+                        minWidth: 20,
+                        maxWidth: 28,
+                        borderRight: '1pt solid #000',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+                        <SquareCheckBoxWithX checked={getEstado(item.value) === 'B'} />
+                      </View>
+                    </View>
+                    <View style={{ flex: 1, minWidth: 20, maxWidth: 28, alignItems: 'center' }}>
+                      <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+                        <SquareCheckBoxWithX checked={getEstado(item.value) === 'M'} />
+                      </View>
                     </View>
                   </View>
-                  <View style={{ flex: 1, minWidth: 20, maxWidth: 28, alignItems: 'center' }}>
-                    <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-                      <SquareCheckBox />
-                    </View>
-                  </View>
-                </View>
-              ))}
-              <View style={{ minHeight: 24, borderTop: '1pt solid #000', marginTop: 2, paddingHorizontal: 2 }}>
-                <Text style={{ fontSize: 9 }}>OBSERVACIONES:</Text>
-              </View>
+                );
+              })}
             </View>
           </View>
 
-          {/* Observaciones generales */}
-          <View style={{ border: '1pt solid #000', minHeight: 32, marginBottom: 8, padding: 4 }}>
-            <Text style={{ fontWeight: 'bold', fontSize: 9, color: '#000' }}>OBSERVACIONES:</Text>
+          {/* Observaciones Salida */}
+          <View style={{ border: '1pt solid #000', minHeight: 70, marginBottom: 6, padding: 4, width: '100%' }}>
+            <Text style={{ fontWeight: 'bold', fontSize: 9, color: '#000', marginBottom: 8 }}>
+              OBSERVACIONES SALIDA:
+            </Text>
+
+            {/* Renglones para escribir con texto de observaciones si existen */}
+            {[...Array(5)].map((_, i) => {
+              // Obtener la línea correspondiente de observacionesSalida (si existe)
+              const lineas =
+                observacionesSalida && observacionesSalida.trim() !== ''
+                  ? observacionesSalida.split('\n').slice(0, 5)
+                  : [];
+              const textoLinea = i < lineas.length ? lineas[i] : '';
+
+              return (
+                <View
+                  key={i}
+                  style={{
+                    borderBottom: '1pt solid #222',
+                    marginBottom: 6,
+                    marginHorizontal: 6,
+                    height: 10,
+                    position: 'relative',
+                  }}
+                >
+                  {textoLinea ? (
+                    <Text
+                      style={{
+                        fontSize: 9,
+                        position: 'absolute',
+                        top: -2,
+                        left: 0,
+                        color: '#000',
+                      }}
+                    >
+                      {textoLinea}
+                    </Text>
+                  ) : null}
+                </View>
+              );
+            })}
+          </View>
+
+          {/* Observaciones Entrada */}
+          <View style={{ border: '1pt solid #000', minHeight: 70, marginBottom: 6, padding: 4, width: '100%' }}>
+            <Text style={{ fontWeight: 'bold', fontSize: 9, color: '#000', marginBottom: 8 }}>
+              OBSERVACIONES ENTRADA:
+            </Text>
+
+            {/* Renglones para escribir con texto de observaciones si existen */}
+            {[...Array(5)].map((_, i) => {
+              // Obtener la línea correspondiente de observacionesEntrada (si existe)
+              const lineas =
+                observacionesEntrada && observacionesEntrada.trim() !== ''
+                  ? observacionesEntrada.split('\n').slice(0, 5)
+                  : [];
+              const textoLinea = i < lineas.length ? lineas[i] : '';
+
+              return (
+                <View
+                  key={i}
+                  style={{
+                    borderBottom: '1pt solid #222',
+                    marginBottom: 6,
+                    marginHorizontal: 6,
+                    height: 10,
+                    position: 'relative',
+                  }}
+                >
+                  {textoLinea ? (
+                    <Text
+                      style={{
+                        fontSize: 9,
+                        position: 'absolute',
+                        top: -2,
+                        left: 0,
+                        color: '#000',
+                      }}
+                    >
+                      {textoLinea}
+                    </Text>
+                  ) : null}
+                </View>
+              );
+            })}
           </View>
 
           {/* Footer tipo formulario alineado al bottom */}
@@ -531,10 +680,10 @@ export const CheckListVehicularLayout = ({
             {/* Primera fila: labels */}
             <View style={{ flexDirection: 'row' }}>
               <View style={{ flex: 1, borderRight: '1pt solid #000' }}>
-                <Text style={{ fontSize: 9, padding: 4 }}>INSPECCIONADO POR :</Text>
+                <Text style={{ fontSize: 9, padding: 4 }}>INSPECCIONADO POR : {inspeccionadoPor}</Text>
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 9, padding: 4 }}>RECIBIDO POR :</Text>
+                <Text style={{ fontSize: 9, padding: 4 }}>RECIBIDO POR : {recibidoPor}</Text>
               </View>
             </View>
             {/* Segunda fila: nombre y fecha/hora en 3 rows */}
@@ -542,9 +691,9 @@ export const CheckListVehicularLayout = ({
               {/* INSPECCIONADO POR */}
               <View style={{ flex: 1, borderRight: '1pt solid #000' }}>
                 {/* Row 1: Nombre y FECHA */}
-                <View style={{ flexDirection: 'row', minHeight: 16, borderBottom: '1pt solid #000' }}>
+                <View style={{ flexDirection: 'row', minHeight: 16 }}>
                   <View style={{ flex: 7, justifyContent: 'center' }}>
-                    <Text style={{ fontSize: 9, padding: 4, color: '#000' }}>{inspeccionadoPor}</Text>
+                    <Text style={{ fontSize: 9, padding: 4, color: '#000' }}></Text>
                   </View>
                   <View
                     style={{
@@ -552,16 +701,21 @@ export const CheckListVehicularLayout = ({
                       backgroundColor: '#1155cc',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      borderRight: '1pt solid #000',
+                      borderBottom: '1pt solid #000',
+                      borderLeft: '1pt solid #000',
                     }}
                   >
                     <Text style={{ color: '#000', fontWeight: 'bold', fontSize: 9 }}>FECHA</Text>
                   </View>
                 </View>
                 {/* Row 2: vacío */}
-                <View style={{ flexDirection: 'row', minHeight: 16, borderBottom: '1pt solid #000' }}>
+                <View style={{ flexDirection: 'row', minHeight: 16 }}>
                   <View style={{ flex: 7 }} />
-                  <View style={{ flex: 3, borderRight: '1pt solid #000' }} />
+                  <View style={{ flex: 3, borderLeft: '1pt solid #000' }}>
+                    <Text style={{ fontSize: 9, padding: 4, color: '#000', textAlign: 'center' }}>
+                      {fechaInspeccion}
+                    </Text>
+                  </View>
                 </View>
                 {/* Row 3: HORA */}
                 <View style={{ flexDirection: 'row', minHeight: 16 }}>
@@ -572,19 +726,20 @@ export const CheckListVehicularLayout = ({
                       backgroundColor: '#1155cc',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      borderRight: '1pt solid #000',
+                      borderTop: '1pt solid #000',
+                      borderLeft: '1pt solid #000',
                     }}
                   >
-                    <Text style={{ color: '#000', fontWeight: 'bold', fontSize: 9 }}>HORA</Text>
+                    <Text style={{ color: '#000', fontWeight: 'bold', fontSize: 9 }}>HORA:</Text>
                   </View>
                 </View>
               </View>
               {/* RECIBIDO POR */}
               <View style={{ flex: 1 }}>
                 {/* Row 1: Nombre y FECHA */}
-                <View style={{ flexDirection: 'row', minHeight: 16, borderBottom: '1pt solid #000' }}>
+                <View style={{ flexDirection: 'row', minHeight: 16 }}>
                   <View style={{ flex: 7, justifyContent: 'center' }}>
-                    <Text style={{ fontSize: 9, padding: 4, color: '#000' }}>{recibidoPor}</Text>
+                    <Text style={{ fontSize: 9, padding: 4, color: '#000' }}></Text>
                   </View>
                   <View
                     style={{
@@ -592,16 +747,21 @@ export const CheckListVehicularLayout = ({
                       backgroundColor: '#d9d9d9',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      borderRight: '1pt solid #000',
+                      borderLeft: '1pt solid #000',
+                      borderBottom: '1pt solid #000',
                     }}
                   >
                     <Text style={{ color: '#000', fontWeight: 'bold', fontSize: 9 }}>FECHA</Text>
                   </View>
                 </View>
                 {/* Row 2: vacío */}
-                <View style={{ flexDirection: 'row', minHeight: 16, borderBottom: '1pt solid #000' }}>
+                <View style={{ flexDirection: 'row', minHeight: 16 }}>
                   <View style={{ flex: 7 }} />
-                  <View style={{ flex: 3, borderRight: '1pt solid #000' }} />
+                  <View style={{ flex: 3, borderLeft: '1pt solid #000' }}>
+                    <Text style={{ fontSize: 9, padding: 4, color: '#000', textAlign: 'center' }}>
+                      {fechaRecepcion}
+                    </Text>
+                  </View>
                 </View>
                 {/* Row 3: HORA */}
                 <View style={{ flexDirection: 'row', minHeight: 16 }}>
@@ -612,10 +772,11 @@ export const CheckListVehicularLayout = ({
                       backgroundColor: '#d9d9d9',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      borderRight: '1pt solid #000',
+                      borderLeft: '1pt solid #000',
+                      borderTop: '1pt solid #000',
                     }}
                   >
-                    <Text style={{ color: '#000', fontWeight: 'bold', fontSize: 9 }}>HORA</Text>
+                    <Text style={{ color: '#000', fontWeight: 'bold', fontSize: 9 }}>HORA:</Text>
                   </View>
                 </View>
               </View>
@@ -629,7 +790,9 @@ export const CheckListVehicularLayout = ({
                 >
                   <Text style={{ fontSize: 8 }}>( FIRMA Y ACLARACION ) :</Text>
                 </View>
-                <View style={{ flex: 3 }} />
+                <View style={{ flex: 3 }}>
+                  <Text style={{ fontSize: 9, padding: 4, color: '#000', textAlign: 'center' }}>{horaInspeccion}</Text>
+                </View>
               </View>
               {/* RECIBIDO POR firma */}
               <View style={{ flex: 1, flexDirection: 'row', minHeight: 20 }}>
@@ -638,7 +801,9 @@ export const CheckListVehicularLayout = ({
                 >
                   <Text style={{ fontSize: 8 }}>( FIRMA Y ACLARACION ) :</Text>
                 </View>
-                <View style={{ flex: 3 }} />
+                <View style={{ flex: 3 }}>
+                  <Text style={{ fontSize: 9, padding: 4, color: '#000', textAlign: 'center' }}>{horaRecepcion}</Text>
+                </View>
               </View>
             </View>
           </View>

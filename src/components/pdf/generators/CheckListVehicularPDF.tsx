@@ -75,7 +75,8 @@ export const CheckListVehicularPDF = ({ data, preview = true, companyLogo, singu
       { id: 'nivelLiquidosEntrada', label: 'Nivel de líquidos (aceite, agua, hidráulico)', group: 'chequeoEntrada' },
       { id: 'ruidoMotorEntrada', label: 'Ruido de motor, gases, combustión', group: 'chequeoEntrada' },
       // --- ADICIONALES ---
-      { id: 'observaciones', label: 'OBSERVACIONES', group: 'adicionales' },
+      { id: 'observacionesEntrada', label: 'Observación Entrada', group: 'adicionales' },
+      { id: 'observacionesSalida', label: 'Observación Salida', group: 'adicionales' },
       { id: 'inspeccionadoPor', label: 'INSPECCIONADO POR', group: 'adicionales' },
       { id: 'recibidoPor', label: 'RECIBIDO POR', group: 'adicionales' },
       { id: 'horaInspeccion', label: 'HORA INSPECCIÓN', group: 'adicionales' },

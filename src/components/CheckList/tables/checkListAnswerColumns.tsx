@@ -1,5 +1,7 @@
 'use client';
 
+import { PDFPreviewDialog } from '@/components/pdf-preview-dialog';
+import { CheckListVehicularPDF } from '@/components/pdf/generators/CheckListVehicularPDF';
 import { Badge } from '@/components/ui/badge';
 import { InfoCircledIcon, PersonIcon } from '@radix-ui/react-icons';
 import { ColumnDef } from '@tanstack/react-table';
@@ -13,6 +15,7 @@ export const checkListAnswerColumns: ColumnDef<{
   chofer: string;
   kilometer: string;
   created_at: string;
+  answer: any;
 }>[] = [
   {
     accessorKey: 'domain',
@@ -58,12 +61,16 @@ export const checkListAnswerColumns: ColumnDef<{
     header: ({ column }) => <DataTableColumnHeader column={column} title="Kilometraje" />,
     cell: ({ row }) => {
       const kilometraje = row.getValue('Kilometraje') as string;
+      console.log(row.original);
       if (kilometraje) {
-
         return <div className="flex w-[150px] items-center">{kilometraje}</div>;
-      }else{
-        return <Badge className="w-[150px]"><InfoCircledIcon className="mr-1 text-white size-4" />No registrado</Badge>
-
+      } else {
+        return (
+          <Badge className="w-[150px]">
+            <InfoCircledIcon className="mr-1 text-white size-4" />
+            No registrado
+          </Badge>
+        );
       }
     },
   },
@@ -103,15 +110,18 @@ export const checkListAnswerColumns: ColumnDef<{
     id: 'Recibido por',
     header: ({ column }) => <DataTableColumnHeader column={column} title="Recibido por" />,
     cell: ({ row }) => {
+      const recibidoPor = row.getValue('Recibido por');
 
-      const recibidoPor =row.getValue('Recibido por')
-
-      if(!recibidoPor){
-        return(
+      if (!recibidoPor) {
+        return (
           <div className="flex">
-            <Badge className=""> <AlertCircle className="mr-1 text-white size-4" />Pendiente</Badge>
+            <Badge className="">
+              {' '}
+              <AlertCircle className="mr-1 text-white size-4" />
+              Pendiente
+            </Badge>
           </div>
-        )
+        );
       }
 
       return (
@@ -125,6 +135,25 @@ export const checkListAnswerColumns: ColumnDef<{
       return value.includes(row.getValue(id));
     },
   },
-
-  
+  {
+    id: 'imprimir',
+    header: () => null,
+    cell: ({ row }) => (
+      <div className="w-[100px]">
+        <PDFPreviewDialog
+          title="Check List Vehicular"
+          description={`Conductor: ${row.original.chofer || 'No especificado'} - Vehículo: ${row.original.domain || 'No especificado'}`}
+          buttonText="Imprimir"
+          className="ml-auto"
+        >
+          <div className="h-full w-full bg-white">
+            <CheckListVehicularPDF data={{...row.original.answer,
+              chofer: row.original.chofer,
+              domain: row.original.domain,
+            }} preview={true} />
+          </div>
+        </PDFPreviewDialog>
+      </div>
+    ),
+  },
 ];

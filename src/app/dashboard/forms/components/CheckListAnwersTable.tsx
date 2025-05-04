@@ -31,6 +31,7 @@ async function CheckListAnwersTable({ answers, employees }: { answers: CheckList
           domain: (e.answer as { dominio: string })?.dominio,
           inspeccionadoPor: inspeccionadoPorName,
           recibidoPor: recibidoPorName,
+          answer: e.answer,
         };
       })}
     />
