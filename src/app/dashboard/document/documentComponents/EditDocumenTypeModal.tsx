@@ -71,13 +71,17 @@ export function EditModal({ Equipo, employeeMockValues, vehicleMockValues, emplo
   const actualCompany = useLoggedUserStore((state) => state.actualCompany);
   const [showEmployeePreview, setShowEmployeePreview] = useState(false);
   const [showVehiclePreview, setShowVehiclePreview] = useState(false);
+  const [showAlertsUpdateModal, setShowAlertsUpdateModal] = useState(false);
+  const [resourcesNeedingAlerts, setResourcesNeedingAlerts] = useState<any[]>([]);
+  const [resourcesNeedingDeletion, setResourcesNeedingDeletion] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
   const [conditions, setConditions] = useState<Condition[]>(() => {
     return (
       Equipo?.conditions?.map((c) => ({
         id: crypto.randomUUID(),
         property:
           c.property_label || baseVehiclePropertiesConfig.find((p) => p.accessor_key === c.property_key)?.label || '',
-        values: c.reference_values?.map((v) => v.value) || c.values || [],
+        values: c.reference_values?.length ? c.reference_values?.map((v) => v.value) : c.values || c.ids || [],
       })) || []
     );
   });
@@ -298,20 +302,204 @@ export function EditModal({ Equipo, employeeMockValues, vehicleMockValues, emplo
       .filter(Boolean);
   }
 
-  async function onSubmit(values: z.infer<typeof FormSchema>) {
+  async function checkAlertsStatus() {
+    if (!Equipo.special) {
+      // Si no es un documento especial, simplemente actualizamos sin revisar alertas
+      await performUpdate(false);
+      return;
+    }
+
+    // Para documentos especiales, verificamos si hay cambios en las alertas
+    let newResourcesToAlert: any[] = [];
+    let resourcesToRemoveAlert: any[] = [];
+
+    // Obtenemos las entradas existentes
+    await fettchExistingEntries();
+
+    if (Equipo.applies === 'Persona') {
+      // Determinar qué empleados necesitan alertas y cuáles necesitan eliminarlas
+      if (matchingEmployees.length > 0) {
+        // Empleados que cumplen condiciones pero no tienen alertas (necesitan alertas nuevas)
+        newResourcesToAlert = matchingEmployees.filter(
+          (employee) => !existingEntries.some((entry: any) => entry.applies.id === employee.id)
+        );
+
+        // Empleados con alertas que ya no cumplen condiciones (necesitan eliminar alertas)
+        resourcesToRemoveAlert = existingEntries
+          .filter((entry: any) => !matchingEmployees.some((employee) => employee.id === entry.applies.id))
+          .map((entry: any) => entry.applies);
+      } else {
+        // Si no hay empleados que cumplan, todos los que tienen alertas necesitan eliminarlas
+        resourcesToRemoveAlert = existingEntries.map((entry: any) => entry.applies);
+      }
+    } else if (Equipo.applies === 'Equipos') {
+      // Determinar qué vehículos necesitan alertas y cuáles necesitan eliminarlas
+      if (matchingVehicles.length > 0) {
+        // Vehículos que cumplen condiciones pero no tienen alertas (necesitan alertas nuevas)
+        newResourcesToAlert = matchingVehicles.filter(
+          (vehicle) => !existingEntries.some((entry: any) => entry.applies.id === vehicle.id)
+        );
+
+        // Vehículos con alertas que ya no cumplen condiciones (necesitan eliminar alertas)
+        resourcesToRemoveAlert = existingEntries
+          .filter((entry: any) => !matchingVehicles.some((vehicle) => vehicle.id === entry.applies.id))
+          .map((entry: any) => entry.applies);
+      } else {
+        // Si no hay vehículos que cumplan, todos los que tienen alertas necesitan eliminarlas
+        resourcesToRemoveAlert = existingEntries.map((entry: any) => entry.applies);
+      }
+    }
+
+    // Verificamos si hay cambios en las alertas
+    if (newResourcesToAlert.length > 0 || resourcesToRemoveAlert.length > 0) {
+      // Guardamos los recursos que necesitan cambios
+      setResourcesNeedingAlerts(newResourcesToAlert);
+      setResourcesNeedingDeletion(resourcesToRemoveAlert);
+      // Abrimos el modal de confirmación
+      setShowAlertsUpdateModal(true);
+    } else {
+      // Si no hay cambios en las alertas, simplemente actualizamos
+      await performUpdate(false);
+    }
+  }
+
+  async function handleAlertsUpdate(manageAlerts: boolean) {
+    setShowAlertsUpdateModal(false);
+    await performUpdate(manageAlerts);
+  }
+
+  async function performUpdate(manageAlerts: boolean) {
+    setIsLoading(true);
+
+    // 1. Preparar valores para actualizar el documento
     // Convertir las condiciones a formato serializable
     const serializedConditions =
       form.getValues('applies') === 'Equipos' ? prepareVehicleConditionsForStorage() : prepareConditionsForStorage();
     const formattedValues = {
-      ...values,
-      name: formatName(values.name),
-      description: formatDescription(values.description),
+      ...form.getValues(),
+      name: formatName(form.getValues('name')),
+      description: formatDescription(form.getValues('description')),
       conditions: serializedConditions,
     };
 
+    try {
+      // 2. Actualizar el documento
+      const { error: updateError } = await supabase.from('document_types').update(formattedValues).eq('id', Equipo.id);
+
+      if (updateError) {
+        throw new Error(handleSupabaseError(updateError.message));
+      }
+
+      // 3. Manejar alertas si es necesario
+      if (manageAlerts && Equipo.special) {
+        const tableNames = {
+          Equipos: 'documents_equipment',
+          Persona: 'documents_employees',
+          Empresa: 'documents_company',
+        };
+        const table = tableNames[Equipo.applies as 'Equipos' | 'Persona' | 'Empresa'];
+
+        // 3.1 Eliminar alertas que ya no aplican (solo si document_path es null)
+        if (resourcesNeedingDeletion.length > 0) {
+          // Obtenemos todos los IDs de recursos que necesitan eliminación
+          const resourceIds = resourcesNeedingDeletion.map((resource) => resource.id);
+
+          // Primero obtenemos los IDs de las alertas con document_path null
+          const { data: alertsToDelete } = await supabase
+            .from(table as 'documents_equipment' | 'documents_employees' | 'documents_company')
+            .select('id')
+            .eq('id_document_types', Equipo.id)
+            .in('applies', resourceIds)
+            .is('document_path', null);
+
+          if (alertsToDelete && alertsToDelete.length > 0) {
+            // Extraemos los IDs de las alertas a eliminar
+            const alertIds = alertsToDelete.map((alert) => alert.id);
+
+            // Eliminamos todas las alertas en una sola operación
+            const { error: deleteError } = await supabase
+              .from(table as 'documents_equipment' | 'documents_employees' | 'documents_company')
+              .delete()
+              .in('id', alertIds);
+
+            if (deleteError) {
+              console.error('Error al eliminar alertas en bulk:', deleteError);
+            }
+          }
+        }
+
+        // 3.2 Generar nuevas alertas
+        if (resourcesNeedingAlerts.length > 0) {
+          // Obtenemos los IDs de recursos que necesitan alertas
+          const resourceIds = resourcesNeedingAlerts.map((resource) => resource.id);
+
+          // Verificamos qué recursos ya tienen alertas para no duplicar
+          const { data: existingAlerts } = await supabase
+            .from(table as 'documents_equipment' | 'documents_employees' | 'documents_company')
+            .select('applies')
+            .eq('id_document_types', Equipo.id)
+            .in('applies', resourceIds);
+
+          const existingAlertIds = existingAlerts?.map((alert) => alert.applies) || [];
+
+          // Filtramos solo recursos que no tengan alertas ya existentes
+          const resourcesToInsert = resourcesNeedingAlerts.filter(
+            (resource) => !existingAlertIds.includes(resource.id)
+          );
+
+          if (resourcesToInsert.length > 0) {
+            const user = await supabase.auth.getUser();
+            // Preparamos los datos para inserción masiva
+            const newEntries = resourcesToInsert.map((resource) => ({
+              id_document_types: Equipo.id,
+              applies: resource.id,
+              is_active: true,
+              // insertedAt: new Date().toISOString(),
+              document_path: null,
+              user_id: user?.data.user?.id,
+            }));
+
+            console.log(newEntries, 'newEntries');
+            // Insertamos todas las alertas nuevas en una sola operación
+            const { error: insertError } = await supabase
+              .from(table as 'documents_equipment' | 'documents_employees' | 'documents_company')
+              .insert(newEntries);
+
+            if (insertError) {
+              console.error('Error al generar alertas en bulk:', insertError);
+            }
+          }
+        }
+      }
+
+      // 4. Actualizar la interfaz
+      fetchDocumentTypes(actualCompany?.id);
+      toast.success('Documento actualizado correctamente');
+      document.getElementById('cerrar-editor-modal')?.click();
+      router.refresh();
+    } catch (error: any) {
+      toast.error(error.message || 'Error al actualizar el documento');
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function onSubmit(values: z.infer<typeof FormSchema>) {
+    // Este método se mantiene por compatibilidad, pero ahora usamos performUpdate
     toast.promise(
       async () => {
-        const { error } = await supabase.from('document_types').update(formattedValues).eq('id', Equipo.id);
+        const { error } = await supabase
+          .from('document_types')
+          .update({
+            ...values,
+            name: formatName(values.name),
+            description: formatDescription(values.description),
+            conditions:
+              form.getValues('applies') === 'Equipos'
+                ? prepareVehicleConditionsForStorage()
+                : prepareConditionsForStorage(),
+          })
+          .eq('id', Equipo.id);
 
         if (error) {
           throw new Error(handleSupabaseError(error.message));
@@ -506,9 +694,7 @@ export function EditModal({ Equipo, employeeMockValues, vehicleMockValues, emplo
         if (Equipo.special && selectedDeleteMode === 'nonMatching') {
           // Identificar recursos que no cumplen con las condiciones actuales
           const matchingIds =
-            Equipo.applies === 'Persona'
-              ? matchingEmployees.map((e) => e.id)
-              : matchingVehicles.map((v) => v.id);
+            Equipo.applies === 'Persona' ? matchingEmployees.map((e) => e.id) : matchingVehicles.map((v) => v.id);
 
           // Obtener IDs de recursos con alertas que NO están en la lista de matching
           const nonMatchingResourceIds = existingEntries
@@ -718,7 +904,7 @@ export function EditModal({ Equipo, employeeMockValues, vehicleMockValues, emplo
           Editar
         </Button>
       </SheetTrigger>
-      <SheetContent className="border-l-4 border-l-muted flex flex-col justify-between overflow-y-auto sm:max-w-lg">
+      <SheetContent className="border-l-4 border-l-muted flex flex-col justify-between overflow-y-auto sm:max-w-screen-md">
         <div>
           <SheetHeader>
             <SheetTitle>Editar tipo de documento</SheetTitle>
@@ -1077,9 +1263,20 @@ export function EditModal({ Equipo, employeeMockValues, vehicleMockValues, emplo
                       </AlertDialogFooter>
                     </AlertDialogContent>
                   </AlertDialog>
-                  <SheetClose asChild>
-                    <Button type="submit">Guardar cambios</Button>
-                  </SheetClose>
+                  <Button
+                    onClick={async () => {
+                      if (Equipo.special) {
+                        await checkAlertsStatus();
+                      } else {
+                        // Si no es especial, se actualiza directamente
+                        await performUpdate(false);
+                      }
+                    }}
+                    disabled={isLoading}
+                    type="button"
+                  >
+                    {isLoading ? 'Procesando...' : 'Guardar cambios'}
+                  </Button>
                   <SheetClose id="cerrar-editor-modal" />
                 </SheetFooter>
               </form>
@@ -1097,12 +1294,12 @@ export function EditModal({ Equipo, employeeMockValues, vehicleMockValues, emplo
             <AlertDialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <AlertDialogHeader>
                 <AlertDialogTitle>Eliminación de alertas</AlertDialogTitle>
-                  {!Equipo.special ? (
+                {!Equipo.special ? (
                   // Modal para documentos NO especiales (funcionalidad original)
                   <>
                     <AlertDialogDescription>
-                      Esta acción eliminará la alerta de todos los recursos a los que no se les haya subido el documento.
-                      Los documentos ya subidos y vinculados a este tipo de documento permanecerán intactos.
+                      Esta acción eliminará la alerta de todos los recursos a los que no se les haya subido el
+                      documento. Los documentos ya subidos y vinculados a este tipo de documento permanecerán intactos.
                     </AlertDialogDescription>
                     <div className="mt-4">
                       {existingEntries.length > 0 ? (
@@ -1129,9 +1326,7 @@ export function EditModal({ Equipo, employeeMockValues, vehicleMockValues, emplo
                           </div>
                         </ScrollArea>
                       ) : (
-                        <div className="p-4 border rounded-md text-center">
-                          No hay alertas pendientes para eliminar
-                        </div>
+                        <div className="p-4 border rounded-md text-center">No hay alertas pendientes para eliminar</div>
                       )}
                     </div>
                   </>
@@ -1139,32 +1334,34 @@ export function EditModal({ Equipo, employeeMockValues, vehicleMockValues, emplo
                   // Modal para documentos especiales (nuevo diseño de dos columnas)
                   <>
                     <AlertDialogDescription className="mb-4">
-                      Seleccione qué alertas desea eliminar. Puede ver el listado completo o solo los recursos que ya no cumplen con las condiciones definidas.
+                      Seleccione qué alertas desea eliminar. Puede ver el listado completo o solo los recursos que ya no
+                      cumplen con las condiciones definidas.
                     </AlertDialogDescription>
-                    
+
                     {/* Botones de selección de modo */}
                     <div className="flex gap-4 mb-4 justify-center">
-                      <Button 
-                        variant={selectedDeleteMode === 'all' ? "destructive" : "outline"}
+                      <Button
+                        variant={selectedDeleteMode === 'all' ? 'destructive' : 'outline'}
                         onClick={() => setSelectedDeleteMode('all')}
                         disabled={existingEntries.length === 0}
                         className="flex-1"
                       >
                         Eliminar todas ({existingEntries.length})
                       </Button>
-                      
+
                       {(() => {
-                        const matchingIds = Equipo.applies === 'Persona' 
-                          ? matchingEmployees.map(e => e.id) 
-                          : matchingVehicles.map(v => v.id);
-                        
+                        const matchingIds =
+                          Equipo.applies === 'Persona'
+                            ? matchingEmployees.map((e) => e.id)
+                            : matchingVehicles.map((v) => v.id);
+
                         const nonMatchingEntries = existingEntries.filter(
-                          entry => !matchingIds.includes(entry.applies.id)
+                          (entry) => !matchingIds.includes(entry.applies.id)
                         );
-                        
+
                         return (
-                          <Button 
-                            variant={selectedDeleteMode === 'nonMatching' ? "destructive" : "outline"}
+                          <Button
+                            variant={selectedDeleteMode === 'nonMatching' ? 'destructive' : 'outline'}
                             onClick={() => setSelectedDeleteMode('nonMatching')}
                             disabled={nonMatchingEntries.length === 0}
                             className="flex-1"
@@ -1174,7 +1371,7 @@ export function EditModal({ Equipo, employeeMockValues, vehicleMockValues, emplo
                         );
                       })()}
                     </div>
-                    
+
                     <div className="grid grid-cols-2 gap-4">
                       {/* Columna 1: Todos los recursos con alertas */}
                       <div>
@@ -1217,13 +1414,13 @@ export function EditModal({ Equipo, employeeMockValues, vehicleMockValues, emplo
                       {/* Columna 2: Recursos que no cumplen con las condiciones actuales */}
                       <div>
                         {(() => {
-                          const matchingIds = 
-                            Equipo.applies === 'Persona' 
-                              ? matchingEmployees.map(e => e.id) 
-                              : matchingVehicles.map(v => v.id);
-                          
+                          const matchingIds =
+                            Equipo.applies === 'Persona'
+                              ? matchingEmployees.map((e) => e.id)
+                              : matchingVehicles.map((v) => v.id);
+
                           const nonMatchingEntries = existingEntries.filter(
-                            entry => !matchingIds.includes(entry.applies.id)
+                            (entry) => !matchingIds.includes(entry.applies.id)
                           );
 
                           return (
@@ -1254,7 +1451,9 @@ export function EditModal({ Equipo, employeeMockValues, vehicleMockValues, emplo
                                           }
                                         })
                                       ) : (
-                                        <div className="text-center py-4">Todos los recursos con alertas cumplen las condiciones actuales</div>
+                                        <div className="text-center py-4">
+                                          Todos los recursos con alertas cumplen las condiciones actuales
+                                        </div>
                                       )}
                                     </div>
                                   </ScrollArea>
@@ -1262,7 +1461,7 @@ export function EditModal({ Equipo, employeeMockValues, vehicleMockValues, emplo
                               </AccordionItem>
                             </Accordion>
                           );
-                        })()} 
+                        })()}
                       </div>
                     </div>
                   </>
@@ -1329,6 +1528,87 @@ export function EditModal({ Equipo, employeeMockValues, vehicleMockValues, emplo
                 <AlertDialogAction asChild>
                   <Button onClick={() => handleGenerateAlerts()}>Generar alertas</Button>
                 </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          {/* Modal para confirmar actualización con manejo de alertas */}
+          <AlertDialog open={showAlertsUpdateModal} onOpenChange={setShowAlertsUpdateModal}>
+            <AlertDialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <AlertDialogHeader>
+                <AlertDialogTitle>Actualizar documento y gestionar alertas</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Al modificar las condiciones del documento, se han detectado cambios en las alertas. Por favor,
+                  seleccione cómo desea proceder:
+                </AlertDialogDescription>
+
+                {/* Contenido del modal */}
+                <div className="mt-4 space-y-4">
+                  {/* Recursos que necesitan alertas nuevas */}
+                  {resourcesNeedingAlerts.length > 0 && (
+                    <div className="border p-4 rounded-md">
+                      <CardTitle className="text-md mb-2">
+                        Recursos que necesitan alertas nuevas ({resourcesNeedingAlerts.length}):
+                      </CardTitle>
+                      <div className="max-h-[200px] overflow-y-auto">
+                        {resourcesNeedingAlerts.map((resource) => {
+                          if (Equipo.applies === 'Equipos') {
+                            return (
+                              <div key={resource.id} className="py-1 px-2 border-b last:border-b-0">
+                                {resource.domain} {resource.serie} - {resource.intern_number}
+                              </div>
+                            );
+                          }
+                          if (Equipo.applies === 'Persona') {
+                            return (
+                              <div key={resource.id} className="py-1 px-2 border-b last:border-b-0">
+                                {resource.lastname} {resource.firstname} - {resource.cuil}
+                              </div>
+                            );
+                          }
+                          return null;
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Recursos que necesitan eliminar alertas */}
+                  {resourcesNeedingDeletion.length > 0 && (
+                    <div className="border p-4 rounded-md">
+                      <CardTitle className="text-md mb-2">
+                        Recursos que perderán alertas ({resourcesNeedingDeletion.length}):
+                      </CardTitle>
+                      <div className="max-h-[200px] overflow-y-auto">
+                        {resourcesNeedingDeletion.map((resource) => {
+                          if (Equipo.applies === 'Equipos') {
+                            return (
+                              <div key={resource.id} className="py-1 px-2 border-b last:border-b-0">
+                                {resource.domain} {resource.serie} - {resource.intern_number}
+                              </div>
+                            );
+                          }
+                          if (Equipo.applies === 'Persona') {
+                            return (
+                              <div key={resource.id} className="py-1 px-2 border-b last:border-b-0">
+                                {resource.lastname} {resource.firstname} - {resource.cuil}
+                              </div>
+                            );
+                          }
+                          return null;
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </AlertDialogHeader>
+              <AlertDialogFooter className="flex flex-col sm:flex-row gap-2">
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <Button variant="outline" onClick={() => handleAlertsUpdate(false)}>
+                  Modificar sin manejar alertas
+                </Button>
+                <Button variant="destructive" onClick={() => handleAlertsUpdate(true)}>
+                  Modificar y manejar alertas
+                </Button>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
