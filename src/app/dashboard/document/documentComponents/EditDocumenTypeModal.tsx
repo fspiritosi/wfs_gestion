@@ -25,6 +25,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
+import { DialogDescription } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { MultiSelect } from '@/components/ui/multi-select-combobox-condition';
@@ -48,9 +49,9 @@ import { useCountriesStore } from '@/store/countries';
 import { useLoggedUserStore } from '@/store/loggedUser';
 import { Equipo } from '@/zodSchemas/schemas';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { PlusCircle, Truck, Users, X } from 'lucide-react';
+import { PlusCircle, Truck, User, Users, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
@@ -677,6 +678,9 @@ export function EditModal({ Equipo, employeeMockValues, vehicleMockValues, emplo
     );
     router.refresh();
   }
+  // Referencia para cerrar el modal de eliminación de alertas
+  const closeAlertModalRef = useRef<HTMLButtonElement>(null);
+
   async function handleDeleteAlerts() {
     const tableNames = {
       Equipos: 'documents_equipment',
@@ -685,66 +689,66 @@ export function EditModal({ Equipo, employeeMockValues, vehicleMockValues, emplo
     };
     const table = tableNames[Equipo.applies as 'Equipos' | 'Persona' | 'Empresa'];
 
-    console.log(table, 'esta es la tabla');
-    console.log(Equipo, 'esta es la Equipo');
+    try {
+      // Si es un documento especial y el modo es 'nonMatching', solo eliminar las alertas que no cumplen con las condiciones
+      if (Equipo.special && selectedDeleteMode === 'nonMatching') {
+        // Identificar recursos que no cumplen con las condiciones actuales
+        const matchingIds =
+          Equipo.applies === 'Persona' ? matchingEmployees.map((e) => e.id) : matchingVehicles.map((v) => v.id);
 
-    toast.promise(
-      async () => {
-        // Si es un documento especial y el modo es 'nonMatching', solo eliminar las alertas que no cumplen con las condiciones
-        if (Equipo.special && selectedDeleteMode === 'nonMatching') {
-          // Identificar recursos que no cumplen con las condiciones actuales
-          const matchingIds =
-            Equipo.applies === 'Persona' ? matchingEmployees.map((e) => e.id) : matchingVehicles.map((v) => v.id);
+        // Obtener IDs de recursos con alertas que NO están en la lista de matching
+        const nonMatchingEntries = existingEntries.filter((entry) => !matchingIds.includes(entry.applies.id));
 
-          // Obtener IDs de recursos con alertas que NO están en la lista de matching
-          const nonMatchingResourceIds = existingEntries
-            .filter((entry) => !matchingIds.includes(entry.applies.id))
-            .map((entry) => entry.id);
-
-          if (nonMatchingResourceIds.length === 0) {
-            throw new Error('No hay alertas para eliminar que no cumplan con las condiciones actuales');
-          }
-
-          // Eliminar solo las alertas de recursos que no cumplen con las condiciones actuales
-          const { error } = await supabase
-            .from(table as any)
-            .delete()
-            .in('id', nonMatchingResourceIds)
-            .is('document_path', null);
-
-          if (error) {
-            throw new Error(handleSupabaseError(error.message));
-          }
-        } else {
-          // Comportamiento original: eliminar todas las alertas
-          const { error } = await supabase
-            .from(table as any)
-            .delete()
-            .eq('id_document_types', Equipo.id)
-            .is('document_path', null);
-
-          if (error) {
-            throw new Error(handleSupabaseError(error.message));
-          }
+        if (nonMatchingEntries.length === 0) {
+          toast.error('No hay alertas para eliminar que no cumplan con las condiciones actuales');
+          return;
         }
 
-        // Actualizar la lista de entradas existentes después de eliminar
-        await fettchExistingEntries();
-      },
-      {
-        loading: 'Eliminando alertas...',
-        success: (data) => {
-          fetchDocumentTypes(actualCompany?.id);
-          router.refresh();
-          return selectedDeleteMode === 'nonMatching'
-            ? 'Se han eliminado las alertas que no cumplen con las condiciones actuales!'
-            : 'Se han eliminado todas las alertas!';
-        },
-        error: (error) => {
-          return error;
-        },
+        // Obtenemos los IDs de las alertas a eliminar
+        const nonMatchingResourceIds = nonMatchingEntries.map((entry) => entry.id);
+
+        // Eliminar solo las alertas de recursos que no cumplen con las condiciones actuales
+        const { error } = await supabase
+          .from(table as any)
+          .delete()
+          .in('id', nonMatchingResourceIds)
+          .is('document_path', null);
+
+        if (error) {
+          throw new Error(handleSupabaseError(error.message));
+        }
+      } else {
+
+        const { error } = await supabase
+          .from(table as any)
+          .delete()
+          .eq('id_document_types', Equipo.id)
+          .is('document_path', null);
+
+        if (error) {
+          throw new Error(handleSupabaseError(error.message));
+        }
       }
-    );
+
+      // Si llegamos aquí, la operación fue exitosa
+      fetchDocumentTypes(actualCompany?.id);
+      router.refresh();
+
+      // Cerrar el modal de eliminación de alertas
+      closeAlertModalRef.current?.click();
+
+      // Mostrar mensaje de éxito
+      toast.success(
+        selectedDeleteMode === 'nonMatching'
+          ? 'Se han eliminado las alertas que no cumplen con las condiciones actuales!'
+          : 'Se han eliminado todas las alertas!'
+      );
+
+      // Actualizar la lista de entradas existentes después de eliminar
+      await fettchExistingEntries();
+    } catch (error: any) {
+      toast.error(error.message || 'Error al eliminar alertas');
+    }
   }
 
   // 2. Función que filtra empleados según las condiciones
@@ -812,11 +816,11 @@ export function EditModal({ Equipo, employeeMockValues, vehicleMockValues, emplo
   // 3. Aplicar filtros cuando cambien las condiciones
   useEffect(() => {
     // Solo aplicar filtros si ya se han cargado empleados
-    if (employees.length > 0) {
+    if (employees?.length > 0) {
       const filtered = filterEmployeesByConditions(employees, conditions, employeePropertiesConfig);
       setMatchingEmployees(filtered);
     }
-    if (vehicles.length > 0) {
+    if (vehicles?.length > 0) {
       setMatchingVehicles(filterVehiclesByConditions(vehicles, conditions, vehiclePropertiesConfig));
     }
   }, [conditions, employees, employeePropertiesConfig, vehicles, vehiclePropertiesConfig]);
@@ -890,6 +894,10 @@ export function EditModal({ Equipo, employeeMockValues, vehicleMockValues, emplo
     setConditions(conditions.filter((condition) => condition.id !== id));
   };
 
+  // Cerca de la línea 587, donde están los otros estados
+  const [showConfirmDeleteModal, setShowConfirmDeleteModal] = useState(false);
+  const [confirmDeleteMessage, setConfirmDeleteMessage] = useState('');
+
   return (
     <Sheet>
       <SheetTrigger asChild>
@@ -905,6 +913,23 @@ export function EditModal({ Equipo, employeeMockValues, vehicleMockValues, emplo
         </Button>
       </SheetTrigger>
       <SheetContent className="border-l-4 border-l-muted flex flex-col justify-between overflow-y-auto sm:max-w-screen-md">
+        <AlertDialog open={showConfirmDeleteModal} onOpenChange={setShowConfirmDeleteModal}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Confirmar eliminación</AlertDialogTitle>
+              <AlertDialogDescription>{confirmDeleteMessage}</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction
+                className={buttonVariants({ variant: 'destructive' })}
+                onClick={() => handleDeleteAlerts()}
+              >
+                Confirmar eliminación
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
         <div>
           <SheetHeader>
             <SheetTitle>Editar tipo de documento</SheetTitle>
@@ -1310,15 +1335,15 @@ export function EditModal({ Equipo, employeeMockValues, vehicleMockValues, emplo
                               const resource = entry.applies;
                               if (Equipo.applies === 'Equipos') {
                                 return (
-                                  <div key={resource.id} className="py-1">
-                                    {resource.domain} {resource.serie} - {resource.intern_number}
+                                  <div key={resource.id} className="py-1 flex items-center gap-2">
+                                    <Truck className="size-5" /> {resource.domain} {resource.serie} - {resource.intern_number}
                                   </div>
                                 );
                               }
                               if (Equipo.applies === 'Persona') {
                                 return (
-                                  <div key={resource.id} className="py-1">
-                                    {resource.lastname} {resource.firstname} - {resource.cuil}
+                                  <div key={resource.id} className="py-1 flex items-center gap-2">
+                                    <User className="size-5" /> {resource.lastname} {resource.firstname} - {resource.cuil}
                                   </div>
                                 );
                               }
@@ -1338,11 +1363,17 @@ export function EditModal({ Equipo, employeeMockValues, vehicleMockValues, emplo
                       cumplen con las condiciones definidas.
                     </AlertDialogDescription>
 
-                    {/* Botones de selección de modo */}
+                    {/* Botones para ejecutar acciones directamente */}
                     <div className="flex gap-4 mb-4 justify-center">
                       <Button
-                        variant={selectedDeleteMode === 'all' ? 'destructive' : 'outline'}
-                        onClick={() => setSelectedDeleteMode('all')}
+                        variant="destructive"
+                        onClick={() => {
+                          setSelectedDeleteMode('all');
+                          setConfirmDeleteMessage(
+                            `¿Estás seguro de que deseas eliminar todas las alertas (${existingEntries.length})?`
+                          );
+                          setShowConfirmDeleteModal(true);
+                        }}
                         disabled={existingEntries.length === 0}
                         className="flex-1"
                       >
@@ -1361,8 +1392,14 @@ export function EditModal({ Equipo, employeeMockValues, vehicleMockValues, emplo
 
                         return (
                           <Button
-                            variant={selectedDeleteMode === 'nonMatching' ? 'destructive' : 'outline'}
-                            onClick={() => setSelectedDeleteMode('nonMatching')}
+                            variant="destructive"
+                            onClick={() => {
+                              setSelectedDeleteMode('nonMatching');
+                              setConfirmDeleteMessage(
+                                `¿Estás seguro de que deseas eliminar las alertas fuera de condiciones (${nonMatchingEntries.length})?`
+                              );
+                              setShowConfirmDeleteModal(true);
+                            }}
                             disabled={nonMatchingEntries.length === 0}
                             className="flex-1"
                           >
@@ -1382,20 +1419,21 @@ export function EditModal({ Equipo, employeeMockValues, vehicleMockValues, emplo
                             </AccordionTrigger>
                             <AccordionContent>
                               <ScrollArea className="h-48 mt-2">
-                                <div className="p-2">
+                                <DialogDescription className="px-2">
                                   {existingEntries.length > 0 ? (
                                     existingEntries.map((entry) => {
                                       const resource = entry.applies;
                                       if (Equipo.applies === 'Equipos') {
                                         return (
-                                          <div key={resource.id} className="py-1">
-                                            {resource.domain} {resource.serie} - {resource.intern_number}
+                                          <div key={resource.id} className="py-1 flex items-center gap-2">
+                                            <Truck className="size-5" /> {resource.domain} {resource.serie} - {resource.intern_number}
                                           </div>
                                         );
                                       }
                                       if (Equipo.applies === 'Persona') {
                                         return (
-                                          <div key={resource.id} className="py-1">
+                                          <div key={resource.id} className="py-1 flex items-center gap-2">
+                                            <User className="size-5" />
                                             {resource.lastname} {resource.firstname} - {resource.cuil}
                                           </div>
                                         );
@@ -1404,7 +1442,7 @@ export function EditModal({ Equipo, employeeMockValues, vehicleMockValues, emplo
                                   ) : (
                                     <div className="text-center py-4">No hay alertas para mostrar</div>
                                   )}
-                                </div>
+                                </DialogDescription>
                               </ScrollArea>
                             </AccordionContent>
                           </AccordionItem>
@@ -1431,21 +1469,21 @@ export function EditModal({ Equipo, employeeMockValues, vehicleMockValues, emplo
                                 </AccordionTrigger>
                                 <AccordionContent>
                                   <ScrollArea className="h-48 mt-2">
-                                    <div className="p-2">
+                                    <DialogDescription className="px-2">
                                       {nonMatchingEntries.length > 0 ? (
                                         nonMatchingEntries.map((entry) => {
                                           const resource = entry.applies;
                                           if (Equipo.applies === 'Equipos') {
                                             return (
-                                              <div key={resource.id} className="py-1">
-                                                {resource.domain} {resource.serie} - {resource.intern_number}
+                                              <div key={resource.id} className="py-1 flex items-center gap-2">
+                                                <Truck className="size-5" /> {resource.domain} {resource.serie} - {resource.intern_number}
                                               </div>
                                             );
                                           }
                                           if (Equipo.applies === 'Persona') {
                                             return (
-                                              <div key={resource.id} className="py-1">
-                                                {resource.lastname} {resource.firstname} - {resource.cuil}
+                                              <div key={resource.id} className="py-1 flex items-center gap-2">
+                                                <User className="size-5" /> {resource.lastname} {resource.firstname} - {resource.cuil}
                                               </div>
                                             );
                                           }
@@ -1455,7 +1493,7 @@ export function EditModal({ Equipo, employeeMockValues, vehicleMockValues, emplo
                                           Todos los recursos con alertas cumplen las condiciones actuales
                                         </div>
                                       )}
-                                    </div>
+                                    </DialogDescription>
                                   </ScrollArea>
                                 </AccordionContent>
                               </AccordionItem>
@@ -1468,7 +1506,7 @@ export function EditModal({ Equipo, employeeMockValues, vehicleMockValues, emplo
                 )}
               </AlertDialogHeader>
               <AlertDialogFooter>
-                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogCancel ref={closeAlertModalRef}>Cancelar</AlertDialogCancel>
                 {!Equipo.special && (
                   <AlertDialogAction className={buttonVariants({ variant: 'destructive' })} asChild>
                     <Button variant={'destructive'} onClick={() => handleDeleteAlerts()}>
@@ -1502,8 +1540,8 @@ export function EditModal({ Equipo, employeeMockValues, vehicleMockValues, emplo
                       {resourcesToInsert.map((resource) => {
                         if (Equipo.applies === 'Equipos') {
                           return (
-                            <div key={resource.id}>
-                              {resource.domain} {resource.serie} - {resource.intern_number}
+                            <div key={resource.id} className="py-1 flex items-center gap-2">
+                              <Truck className="size-5" /> {resource.domain} {resource.serie} - {resource.intern_number}
                             </div>
                           );
                         }
@@ -1543,26 +1581,32 @@ export function EditModal({ Equipo, employeeMockValues, vehicleMockValues, emplo
                 </AlertDialogDescription>
 
                 {/* Contenido del modal */}
-                <div className="mt-4 space-y-4">
+                <DialogDescription className="mt-4 space-y-4">
                   {/* Recursos que necesitan alertas nuevas */}
                   {resourcesNeedingAlerts.length > 0 && (
                     <div className="border p-4 rounded-md">
-                      <CardTitle className="text-md mb-2">
+                      <CardTitle className="text-md underline mb-1">
                         Recursos que necesitan alertas nuevas ({resourcesNeedingAlerts.length}):
                       </CardTitle>
                       <div className="max-h-[200px] overflow-y-auto">
                         {resourcesNeedingAlerts.map((resource) => {
                           if (Equipo.applies === 'Equipos') {
                             return (
-                              <div key={resource.id} className="py-1 px-2 border-b last:border-b-0">
-                                {resource.domain} {resource.serie} - {resource.intern_number}
+                              <div
+                                key={resource.id}
+                                className="py-1 px-2 border-b last:border-b-0 flex items-center gap-2"
+                              >
+                                <Truck className="size-5" /> {resource.domain} {resource.serie} - {resource.intern_number}
                               </div>
                             );
                           }
                           if (Equipo.applies === 'Persona') {
                             return (
-                              <div key={resource.id} className="py-1 px-2 border-b last:border-b-0">
-                                {resource.lastname} {resource.firstname} - {resource.cuil}
+                              <div
+                                key={resource.id}
+                                className="py-1 px-2 border-b last:border-b-0 flex items-center gap-2"
+                              >
+                                <User className="size-5"/> {resource.lastname} {resource.firstname} - {resource.cuil}
                               </div>
                             );
                           }
@@ -1582,15 +1626,21 @@ export function EditModal({ Equipo, employeeMockValues, vehicleMockValues, emplo
                         {resourcesNeedingDeletion.map((resource) => {
                           if (Equipo.applies === 'Equipos') {
                             return (
-                              <div key={resource.id} className="py-1 px-2 border-b last:border-b-0">
-                                {resource.domain} {resource.serie} - {resource.intern_number}
+                              <div
+                                key={resource.id}
+                                className="py-1 px-2 border-b last:border-b-0 flex items-center gap-2"
+                              >
+                                <Truck className="size-5" /> {resource.domain} {resource.serie} - {resource.intern_number}
                               </div>
                             );
                           }
                           if (Equipo.applies === 'Persona') {
                             return (
-                              <div key={resource.id} className="py-1 px-2 border-b last:border-b-0">
-                                {resource.lastname} {resource.firstname} - {resource.cuil}
+                              <div
+                                key={resource.id}
+                                className="py-1 px-2 border-b last:border-b-0 flex items-center gap-2"
+                              >
+                                <User className="size-5"/> {resource.lastname} {resource.firstname} - {resource.cuil}
                               </div>
                             );
                           }
@@ -1599,15 +1649,27 @@ export function EditModal({ Equipo, employeeMockValues, vehicleMockValues, emplo
                       </div>
                     </div>
                   )}
-                </div>
+                </DialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter className="flex flex-col sm:flex-row gap-2">
                 <AlertDialogCancel>Cancelar</AlertDialogCancel>
                 <Button variant="outline" onClick={() => handleAlertsUpdate(false)}>
-                  Modificar sin manejar alertas
+                  {resourcesNeedingAlerts.length > 0 && resourcesNeedingDeletion.length > 0
+                    ? 'Modificar sin manejar alertas'
+                    : resourcesNeedingDeletion.length > 0
+                      ? 'Modificar sin eliminar alertas'
+                      : resourcesNeedingAlerts.length > 0
+                        ? 'Modificar sin crear alertas'
+                        : 'Modificar'}
                 </Button>
                 <Button variant="destructive" onClick={() => handleAlertsUpdate(true)}>
-                  Modificar y manejar alertas
+                  {resourcesNeedingAlerts.length > 0 && resourcesNeedingDeletion.length > 0
+                    ? 'Modificar y manejar alertas'
+                    : resourcesNeedingDeletion.length > 0
+                      ? 'Modificar y eliminar alertas'
+                      : resourcesNeedingAlerts.length > 0
+                        ? 'Modificar y crear alertas'
+                        : 'Modificar'}
                 </Button>
               </AlertDialogFooter>
             </AlertDialogContent>

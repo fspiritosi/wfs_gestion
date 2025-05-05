@@ -27,7 +27,7 @@ const DocumentsTable = ({ data, filters,children, employeeMockValues, vehicleMoc
       </TableRow>
     </TableHeader>
     <TableBody>
-      {data.map((doc) => (
+      {data?.map((doc) => (
         <TableRow key={doc.id}>
           <TableCell>{doc.name}</TableCell>
           <TableCell className="text-center">{doc.multiresource ? 'Si' : 'No'}</TableCell>

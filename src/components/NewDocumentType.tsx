@@ -371,11 +371,11 @@ export default function NewDocumentType({
   // 3. Aplicar filtros cuando cambien las condiciones
   useEffect(() => {
     // Solo aplicar filtros si ya se han cargado empleados
-    if (employees.length > 0) {
+    if (employees?.length > 0) {
       const filtered = filterEmployeesByConditions(employees, conditions, employeePropertiesConfig);
       setMatchingEmployees(filtered);
     }
-    if (vehicles.length > 0) {
+    if (vehicles?.length > 0) {
       setMatchingVehicles(filterVehiclesByConditions(vehicles, conditions, vehiclePropertiesConfig));
     }
   }, [conditions, employees, employeePropertiesConfig, vehicles, vehiclePropertiesConfig]);
