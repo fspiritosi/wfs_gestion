@@ -1,3 +1,4 @@
+import { fetchAllEmployeesWithRelations, fetchAllEquipmentWithRelations } from '@/app/server/GET/actions';
 import EmployesDiagram from '@/components/Diagrams/EmployesDiagram';
 import DocumentNav from '@/components/DocumentNav';
 import PageTableSkeleton from '@/components/Skeletons/PageTableSkeleton';
@@ -8,10 +9,19 @@ import { Suspense } from 'react';
 import CovenantTreeFile from '../company/actualCompany/covenant/CovenantTreeFile';
 import EmployeeDocumentsTabs from '../document/documentComponents/EmployeeDocumentsTabs';
 import EmployeeListTabs from '../document/documentComponents/EmployeeListTabs';
-import TypesDocumentAction from '../document/documentComponents/TypesDocumentAction';
+import TypesDocumentAction, {
+  setEmployeeDataOptions,
+  setVehicleDataOptions,
+} from '../document/documentComponents/TypesDocumentAction';
 import TypesDocumentsView from '../document/documentComponents/TypesDocumentsView';
 
 const EmployeePage = async () => {
+  const EmployeesOptionsData = await setEmployeeDataOptions();
+  const VehicleOptionsData = await setVehicleDataOptions();
+
+  const empleadosCargados = await fetchAllEmployeesWithRelations();
+  const equiposCargados = await fetchAllEquipmentWithRelations();
+
   const viewData = {
     defaultValue: 'employees',
     tabsValues: [
@@ -72,7 +82,15 @@ const EmployeePage = async () => {
           description: 'Tipos de documentos auditables',
           buttonActioRestricted: [''],
           buttonAction: <TypesDocumentAction optionChildrenProp="Persona" />,
-          component: <TypesDocumentsView personas />,
+          component: (
+            <TypesDocumentsView
+              personas
+              employeeMockValues={EmployeesOptionsData}
+              vehicleMockValues={VehicleOptionsData}
+              employees={empleadosCargados}
+              vehicles={equiposCargados}
+            />
+          ),
         },
       },
       {
