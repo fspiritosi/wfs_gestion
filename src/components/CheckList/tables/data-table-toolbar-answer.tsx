@@ -4,9 +4,9 @@ import { Button } from '@/components/ui/button';
 import { Cross2Icon, PersonIcon } from '@radix-ui/react-icons';
 import { Table } from '@tanstack/react-table';
 
-import { DataTableFacetedFilter } from './data-table-faceted-filter';
-import { DataTableViewOptions } from './data-table-view-options';
+import { Truck } from 'lucide-react';
 import { DataTableAnswersFacetedFilter } from './data-table-answers-filters';
+import { DataTableViewOptions } from './data-table-view-options';
 
 interface DataTableToolbarProps<TData> {
   table: Table<TData>;
@@ -35,7 +35,7 @@ export function DataTableToolbarAnswer<TData>({ table }: DataTableToolbarProps<T
     return {
       label: domain,
       value: domain,
-      icon: PersonIcon,
+      icon: Truck,
     };
   });
 
@@ -43,6 +43,38 @@ export function DataTableToolbarAnswer<TData>({ table }: DataTableToolbarProps<T
     return {
       label: frecuencia,
       value: frecuencia,
+      icon: PersonIcon,
+    };
+  });
+
+  const uniqueRecibidoPor = table.getColumn('Recibido por')?.getFacetedUniqueValues()
+    ? Array.from(
+        new Set(
+          Array?.from((table.getColumn('Recibido por')?.getFacetedUniqueValues() as any)?.keys()).map((item: any) => item)
+        )
+      )
+    : [];
+
+  const recibidoPorOptions = uniqueRecibidoPor.map((recibidoPor) => {
+    return {
+      label: recibidoPor,
+      value: recibidoPor,
+      icon: PersonIcon,
+    };
+  });
+
+  const uniqueInspeccionadoPor = table.getColumn('Inspeccionado por')?.getFacetedUniqueValues()
+    ? Array.from(
+        new Set(
+          Array?.from((table.getColumn('Inspeccionado por')?.getFacetedUniqueValues() as any)?.keys()).map((item: any) => item)
+        )
+      )
+    : [];
+
+  const inspeccionadoPorOptions = uniqueInspeccionadoPor.map((inspeccionadoPor) => {
+    return {
+      label: inspeccionadoPor,
+      value: inspeccionadoPor,
       icon: PersonIcon,
     };
   });
@@ -56,6 +88,12 @@ export function DataTableToolbarAnswer<TData>({ table }: DataTableToolbarProps<T
         )}
         {table.getColumn('Dominio') && (
           <DataTableAnswersFacetedFilter column={table.getColumn('Dominio')} title="Dominios" options={domainOptions} />
+        )}
+        {table.getColumn('Recibido por') && (
+          <DataTableAnswersFacetedFilter column={table.getColumn('Recibido por')} title="Recibido por" options={recibidoPorOptions} />
+        )}
+        {table.getColumn('Inspeccionado por') && (
+          <DataTableAnswersFacetedFilter column={table.getColumn('Inspeccionado por')} title="Inspeccionado por" options={inspeccionadoPorOptions} />
         )}
         {isFiltered && (
           <Button variant="ghost" onClick={() => table.resetColumnFilters()} className="h-8 px-2 lg:px-3">

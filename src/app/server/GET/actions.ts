@@ -125,6 +125,284 @@ export const fetchAllEmployees = async (role?: string) => {
   }
   return data;
 };
+
+export const fetchProvinces = async () => {
+  const cookiesStore = cookies();
+  const supabase = supabaseServer();
+  const company_id = cookiesStore.get('actualComp')?.value;
+
+  const { data, error } = await supabase.from('provinces').select('*');
+
+  if (error) {
+    console.error('Error fetching provinces:', error);
+    return [];
+  }
+  return data;
+};
+export const fetchCustomers = async () => {
+  const cookiesStore = cookies();
+  const supabase = supabaseServer();
+  const company_id = cookiesStore.get('actualComp')?.value;
+
+  const { data, error } = await supabase.from('customers').select('*');
+
+  if (error) {
+    console.error('Error fetching customers:', error);
+    return [];
+  }
+  return data;
+};
+
+export const fetchHierrarchicalPositions = async () => {
+  const cookiesStore = cookies();
+  const supabase = supabaseServer();
+  const company_id = cookiesStore.get('actualComp')?.value;
+
+  const { data, error } = await supabase.from('hierarchy').select('*');
+
+  if (error) {
+    console.error('Error fetching hierarchical positions:', error);
+    return [];
+  }
+  return data;
+};
+
+export const fetchAllCategories = async () => {
+  const cookiesStore = cookies();
+  const supabase = supabaseServer();
+  const company_id = cookiesStore.get('actualComp')?.value;
+
+  const { data, error } = await supabase.from('category').select('*');
+
+  if (error) {
+    console.error('Error fetching categories:', error);
+    return [];
+  }
+  return data;
+};
+
+export const fetchCovenants = async () => {
+  const cookiesStore = cookies();
+  const supabase = supabaseServer();
+  const company_id = cookiesStore.get('actualComp')?.value;
+
+  const { data, error } = await supabase.from('covenant').select('*');
+
+  if (error) {
+    console.error('Error fetching covenants:', error);
+    return [];
+  }
+  return data;
+};
+
+export const fetchGuilds = async () => {
+  const cookiesStore = cookies();
+  const supabase = supabaseServer();
+  const company_id = cookiesStore.get('actualComp')?.value;
+  if (!company_id) return [];
+
+  const { data, error } = await supabase.from('guild').select('*');
+
+  if (error) {
+    console.error('Error fetching guilds:', error);
+    return [];
+  }
+  return data;
+};
+
+export const fetchVehicleModels = async () => {
+  const cookiesStore = cookies();
+  const supabase = supabaseServer();
+  const company_id = cookiesStore.get('actualComp')?.value;
+  if (!company_id) return [];
+
+  const { data, error } = await supabase.from('model_vehicles').select('*');
+
+  if (error) {
+    console.error('Error fetching vehicle models:', error);
+    return [];
+  }
+  return data;
+};
+
+export const fetchVehicleBrands = async () => {
+  const cookiesStore = cookies();
+  const supabase = supabaseServer();
+  const company_id = cookiesStore.get('actualComp')?.value;
+  if (!company_id) return [];
+
+  const { data, error } = await supabase.from('brand_vehicles').select('*');
+
+  if (error) {
+    console.error('Error fetching vehicle brands:', error);
+    return [];
+  }
+  return data;
+};
+
+export const fetchTypeVehicles = async () => {
+  const cookiesStore = cookies();
+  const supabase = supabaseServer();
+  const company_id = cookiesStore.get('actualComp')?.value;
+  if (!company_id) return [];
+
+  const { data, error } = await supabase.from('type').select('*');
+
+  if (error) {
+    console.error('Error fetching vehicle types:', error);
+    return [];
+  }
+  return data;
+};
+
+export const fetchTypesOfVehicles = async () => {
+  const cookiesStore = cookies();
+  const supabase = supabaseServer();
+  const company_id = cookiesStore.get('actualComp')?.value;
+  if (!company_id) return [];
+
+  const { data, error } = await supabase.from('types_of_vehicles').select('*');
+
+  if (error) {
+    console.error('Error fetching types of vehicles:', error);
+    return [];
+  }
+  return data;
+};
+export const fetchWorkDiagrams = async () => {
+  const cookiesStore = cookies();
+  const supabase = supabaseServer();
+  const company_id = cookiesStore.get('actualComp')?.value;
+  if (!company_id) return [];
+
+  const { data, error } = await supabase.from('work-diagram').select('*');
+
+  if (error) {
+    console.error('Error fetching work diagrams:', error);
+    return [];
+  }
+  return data;
+};
+
+export const fetchAllEquipmentWithRelations = async () => {
+  const cookiesStore = cookies();
+  const supabase = supabaseServer();
+  const company_id = cookiesStore.get('actualComp')?.value;
+  if (!company_id) return [];
+
+  const { data, error } = await supabase
+    .from('vehicles')
+    .select('*,brand(*),model(*),type(*),types_of_vehicles(*),contractor_equipment(*,contractor_id(*))')
+    .eq('company_id', company_id || '')
+    .returns<VehicleWithBrand[]>();
+
+  if (error) {
+    console.error('Error fetching vehicles:', error);
+    return [];
+  }
+  return data;
+};
+export const fetchAllEquipmentWithRelationsById = async (id: string) => {
+  const cookiesStore = cookies();
+  const supabase = supabaseServer();
+  const company_id = cookiesStore.get('actualComp')?.value;
+  if (!company_id) return [];
+
+  const { data, error } = await supabase
+    .from('vehicles')
+    .select('*,brand(*),model(*),type(*),types_of_vehicles(*),contractor_equipment(*,contractor_id(*))')
+    .eq('company_id', company_id || '')
+    .eq('id', id)
+    .returns<VehicleWithBrand[]>();
+
+  if (error) {
+    console.error('Error fetching vehicles:', error);
+    return [];
+  }
+  return data;
+};
+// Employee-related actions
+export const fetchAllEmployeesWithRelations = async () => {
+  const cookiesStore = cookies();
+  const supabase = supabaseServer();
+  const company_id = cookiesStore.get('actualComp')?.value;
+  const user = await fetchCurrentUser();
+  if (!company_id) return [];
+
+  let { data, error } = await supabase
+    .from('employees')
+    .select(
+      `*,guild(*),covenant(*),category(*), city (
+    *
+  ),
+  province(
+    *
+  ),
+  workflow_diagram(
+    *
+  ),
+  hierarchical_position(
+    *
+  ),
+  birthplace(
+    *
+  ),
+  contractor_employee(
+    customers(
+      *
+    )
+  )`
+    )
+    .eq('company_id', company_id || '')
+    .returns<EmployeeDetailed[]>();
+
+  if (error) {
+    console.error('Error fetching employees:', error);
+    return [];
+  }
+  return data ?? [];
+};
+export const fetchAllEmployeesWithRelationsById = async (id: string) => {
+  const cookiesStore = cookies();
+  const supabase = supabaseServer();
+  const company_id = cookiesStore.get('actualComp')?.value;
+  const user = await fetchCurrentUser();
+  if (!company_id) return [];
+
+  let { data, error } = await supabase
+    .from('employees')
+    .select(
+      `*,guild(*),covenant(*),category(*), city (
+    *
+  ),
+  province(
+    *
+  ),
+  workflow_diagram(
+    *
+  ),
+  hierarchical_position(
+    *
+  ),
+  birthplace(
+    *
+  ),
+  contractor_employee(
+    customers(
+      *
+    )
+  )`
+    )
+    .eq('company_id', company_id || '')
+    .eq('id', id)
+    .returns<EmployeeDetailed[]>();
+
+  if (error) {
+    console.error('Error fetching employees:', error);
+    return [];
+  }
+  return data ?? [];
+};
 export const fetchAllActivesEmployees = async () => {
   const cookiesStore = cookies();
   const supabase = supabaseServer();
@@ -452,6 +730,20 @@ export const getDocumentEquipmentById = async (id: string) => {
     .eq('id', id);
   return documents_vehicle;
 };
+
+export const fetchServerRole = async () => {
+  const cookiesStore = cookies();
+  const supabase = supabaseServer();
+  const company_id = cookiesStore.get('actualComp')?.value;
+  if (!company_id) return [];
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const role = await getActualRole(company_id as string, user?.id as string);
+
+  return role;
+};
+
 // Equipment-related actions
 export const fetchAllEquipment = async (company_equipment_id?: string) => {
   const cookiesStore = cookies();
@@ -478,7 +770,7 @@ export const fetchAllEquipment = async (company_equipment_id?: string) => {
 
   const { data, error } = await supabase
     .from('vehicles')
-    .select('*,brand(*),model(*),type(*),types_of_vehicles(*),contractor_equipment(*,contractor_id(*))')
+    .select('*,brand(*),model(*),type(*),types_of_vehicles(*),contractor_equipment(customers(*))')
     .eq('company_id', (company_id ?? company_equipment_id) || '')
     .returns<VehicleWithBrand[]>();
 

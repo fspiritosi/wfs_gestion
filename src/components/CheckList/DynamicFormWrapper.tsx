@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import CheckListVehicular from './CheckListVehicular';
 import VehicleInspectionChecklist from './ChecklistSergio';
 import DynamicChecklistForm from './DynamicChecklistForm';
 import VehicleMaintenanceChecklist from './VehicleInspectionChecklist';
@@ -8,10 +9,10 @@ import VehicleMaintenanceChecklist from './VehicleInspectionChecklist';
 type FormType =
   | 'Transporte SP-ANAY - CHK - HYS - 01'
   | 'Transporte SP-ANAY - CHK - HYS - 04'
-  | 'Transporte SP-ANAY - CHK - HYS - 03';
+  | 'Transporte SP-ANAY - CHK - HYS - 03'
+  | 'CHECK LIST VEHICULAR';
 
-interface DynamicFormWrapperProps {
-  formType: FormType;
+export type EquipmentForm = {
   equipments?: {
     label: string;
     value: string;
@@ -22,6 +23,11 @@ interface DynamicFormWrapperProps {
     brand: string | null;
     intern_number: string;
   }[];
+};
+
+interface DynamicFormWrapperProps {
+  formType: FormType;
+  equipments?: EquipmentForm['equipments'];
   currentUser?: Profile[];
   defaultAnswer?: CheckListAnswerWithForm[];
   form_Info: CustomForm[];
@@ -30,11 +36,16 @@ interface DynamicFormWrapperProps {
   default_equipment_id?: string;
   empleado_name?: string | undefined;
   singurl?: string | null;
+  employees:{
+    label:string,
+    value:string
+  }[]
 }
 
 export default function DynamicFormWrapper({
   formType,
   equipments,
+  employees,
   currentUser,
   defaultAnswer,
   form_Info,
@@ -46,8 +57,25 @@ export default function DynamicFormWrapper({
 }: DynamicFormWrapperProps) {
   const [activeFormType, setActiveFormType] = useState<FormType>(formType);
 
+  console.log(activeFormType);
+
   const renderForm = () => {
     switch (activeFormType) {
+      case 'CHECK LIST VEHICULAR':
+        return (
+          <CheckListVehicular
+            equipments={equipments}
+            currentUser={currentUser}
+            defaultAnswer={defaultAnswer}
+            form_Info={form_Info}
+            resetQrSelection={resetQrSelection}
+            default_equipment_id={default_equipment_id}
+            empleado_name={empleado_name}
+            singurl={singurl ||''}
+            employees={employees}
+          />
+        );
+
       case 'Transporte SP-ANAY - CHK - HYS - 01':
         return (
           <VehicleInspectionChecklist

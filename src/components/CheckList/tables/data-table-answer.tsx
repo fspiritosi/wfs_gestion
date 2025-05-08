@@ -78,16 +78,31 @@ export function CheckListAnswerTable<TData, TValue>({ columns, data }: DataTable
             {table.getRowModel().rows?.length ? (
               table.getRowModel().rows.map((row) => (
                 <TableRow
-                  className="hover:cursor-pointer"
+                  className="hover:cursor-pointer relative"
                   key={row.id}
                   data-state={row.getIsSelected() && 'selected'}
-                  onClick={() => {
-                    router.push(`/dashboard/forms/${(row.original as any).id}/view`);
-                  }}
+                
                 >
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>
-                  ))}
+                  {row.getVisibleCells().map((cell) => {
+                    // Si la columna es 'imprimir', no agregues onClick
+                    if (cell.column.id === 'imprimir') {
+                      return (
+                        <TableCell key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>
+                      );
+                    }
+                    // Para las demás celdas, agrega navegación
+                    return (
+                      <TableCell
+                        key={cell.id}
+                        onClick={() => {
+                          router.push(`/dashboard/forms/${(row.original as any).id}/view`);
+                        }}
+                        className="cursor-pointer"
+                      >
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </TableCell>
+                    );
+                  })}
                 </TableRow>
               ))
             ) : (

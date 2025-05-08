@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import { revalidatePath } from 'next/cache';
 import { cookies } from 'next/headers';
 // import { supabase } from '../../../../../supabase/supabase';
+import { fetchAllDocumentTypes } from '@/app/server/GET/actions';
 import { supabaseServer } from '@/lib/supabase/server';
 import { getRole } from '@/lib/utils/getRole';
 import VehiclesForm, { generic } from '../../../../components/VehiclesForm';
@@ -59,6 +60,7 @@ export default async function EquipmentFormAction({ searchParams }: { searchPara
 
   const role = await getRole();
   console.log('role action equipment', role);
+  const documentsTypes = await fetchAllDocumentTypes();
   return (
     <section className="grid grid-cols-1 xl:grid-cols-8 gap-3 md:mx-7 py-4">
       <Card
@@ -71,6 +73,7 @@ export default async function EquipmentFormAction({ searchParams }: { searchPara
           role={role as string}
           vehicle={vehicle?.[0]}
           types={types as generic[]}
+          documentsTypes={documentsTypes}
           brand_vehicles={brand_vehicles}
         >
           <TabsContent value="documents">

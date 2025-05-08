@@ -1,5 +1,6 @@
 import DocumentTable from '@/app/dashboard/document/DocumentTable';
 import {
+  fetchAllDocumentTypes,
   fetchDiagramsByEmployeeId,
   fetchDiagramsHistoryByEmployeeId,
   fetchDiagramsTypes,
@@ -19,7 +20,7 @@ export default async function EmployeeFormAction({ searchParams }: { searchParam
   //   .select('*,applies(*),id_document_types(*)')
   //   .eq('applies.document_number', searchParams.document)
   //   .not('applies', 'is', null)
-  const role = await getRole()
+  const role = await getRole();
 
   const supabase = supabaseServer();
   const user = await supabase.auth.getUser();
@@ -116,9 +117,12 @@ export default async function EmployeeFormAction({ searchParams }: { searchParam
     modifiedAt: moment(item.created_at).local().format('DD/MM/YYYY HH:mm'), // Formatear a la hora local
     type: item.prev_state ? 'modified' : 'created',
   }));
-  
+
   const diagrams2 = await fetchDiagramsByEmployeeId(searchParams.employee_id);
   const diagrams_types2 = await fetchDiagramsTypes();
+  const documentsTypes = await fetchAllDocumentTypes();
+
+  console.log(JSON.stringify(documentsTypes), 'documentsTypes');
   return (
     <section className="grid grid-cols-1 xl:grid-cols-8 gap-3 md:mx-7 py-4">
       <Card className={cn('col-span-8 flex flex-col justify-between overflow-hidden')}>
@@ -127,6 +131,7 @@ export default async function EmployeeFormAction({ searchParams }: { searchParam
           covenants={covenants}
           categories={categories}
           user={formattedEmployee}
+          documentsTypes={documentsTypes}
           role={role}
           diagrams={diagrams2}
           diagrams_types={diagrams_types2}

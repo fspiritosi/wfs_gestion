@@ -1,3 +1,4 @@
+import { fetchAllEmployeesWithRelations, fetchAllEquipmentWithRelations } from '@/app/server/GET/actions';
 import DocumentNav from '@/components/DocumentNav';
 import PageTableSkeleton from '@/components/Skeletons/PageTableSkeleton';
 import RepairTypes from '@/components/Tipos_de_reparaciones/RepairTypes';
@@ -6,10 +7,19 @@ import { buttonVariants } from '@/components/ui/button';
 import Link from 'next/link';
 import { Suspense } from 'react';
 import EquipmentTabs from '../document/documentComponents/EquipmentTabs';
-import TypesDocumentAction from '../document/documentComponents/TypesDocumentAction';
+import TypesDocumentAction, {
+  setEmployeeDataOptions,
+  setVehicleDataOptions,
+} from '../document/documentComponents/TypesDocumentAction';
 import TypesDocumentsView from '../document/documentComponents/TypesDocumentsView';
 import EquipmentListTabs from './equipmentComponentes/EquipmentListTabs';
 export default async function Equipment() {
+  const EmployeesOptionsData = await setEmployeeDataOptions();
+  const VehicleOptionsData = await setVehicleDataOptions();
+
+  const empleadosCargados = await fetchAllEmployeesWithRelations();
+  const equiposCargados = await fetchAllEquipmentWithRelations();
+
   const viewData = {
     defaultValue: 'equipos',
     tabsValues: [
@@ -59,7 +69,15 @@ export default async function Equipment() {
           buttonActioRestricted: [''],
           description: 'Tipos de documentos auditables',
           buttonAction: <TypesDocumentAction optionChildrenProp="Equipos" />,
-          component: <TypesDocumentsView equipos />,
+          component: (
+            <TypesDocumentsView
+              equipos
+              employeeMockValues={EmployeesOptionsData}
+              vehicleMockValues={VehicleOptionsData}
+              employees={empleadosCargados}
+              vehicles={equiposCargados}
+            />
+          ),
         },
       },
       {
