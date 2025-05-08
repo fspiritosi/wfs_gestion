@@ -13,6 +13,7 @@ function CompletarChecklist({
   equipmentsForComboBox,
   default_equipment_id,
   empleado_name,
+  employees
 }: {
   onReturn: () => void;
   checkList: CheckListWithAnswer[];
@@ -28,6 +29,10 @@ function CompletarChecklist({
   }[];
   default_equipment_id?: string;
   empleado_name?: string | undefined;
+  employees: {
+    label: string;
+    value: string;
+  }[];
 }) {
   const [activeFormType, setActiveFormType] = useState<string>('');
 
@@ -38,6 +43,7 @@ function CompletarChecklist({
         formType={activeFormType as any}
         resetQrSelection={setActiveFormType}
         equipments={equipmentsForComboBox}
+        employees={employees}
         default_equipment_id={default_equipment_id}
         empleado_name={empleado_name}
       />

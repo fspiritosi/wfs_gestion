@@ -74,7 +74,7 @@ const allocatedToRangeFilter: FilterFn<Colum> = (
     ?.customers.filter(
       (company: any) => company.company_id.toString() === useLoggedUserStore?.getState?.()?.actualCompany?.id
     )
-    .find((e) => String(e.id) === String(row.original.allocated_to))?.name;
+    .find((e) => String(e?.id) === String(row.original.allocated_to))?.name;
 
   if (contractorCompanies?.toLocaleLowerCase()?.includes(filterValue.toLocaleLowerCase())) {
     return true;
@@ -101,7 +101,7 @@ export const EquipmentColums: ColumnDef<Colum>[] = [
     cell: ({ row }: { row: any }) => {
       const share = useLoggedUserStore((state) => state.sharedCompanies);
       const profile = useLoggedUserStore((state) => state.credentialUser?.id);
-      const owner = useLoggedUserStore((state) => state.actualCompany?.owner_id.id);
+      const owner = useLoggedUserStore((state) => state.actualCompany?.owner_id?.id);
       const users = useLoggedUserStore((state) => state);
       const company = useLoggedUserStore((state) => state.actualCompany?.id);
 
@@ -112,7 +112,7 @@ export const EquipmentColums: ColumnDef<Colum>[] = [
         const roleRaw = share
           ?.filter(
             (item: any) =>
-              item.company_id.id === company &&
+              item.company_id?.id === company &&
               Object.values(item).some((value) => typeof value === 'string' && value.includes(profile as string))
           )
           .map((item: any) => item.role);
@@ -154,7 +154,7 @@ export const EquipmentColums: ColumnDef<Colum>[] = [
               termination_date: null,
               reason_for_termination: null,
             })
-            .eq('id', equipment.id)
+            .eq('id', equipment?.id)
             .eq('company_id', actualCompany?.id)
             .select();
 
@@ -184,7 +184,7 @@ export const EquipmentColums: ColumnDef<Colum>[] = [
               termination_date: data.termination_date,
               reason_for_termination: data.reason_for_termination,
             })
-            .eq('id', equipment.id)
+            .eq('id', equipment?.id)
             .eq('company_id', actualCompany?.id)
             .select();
 
@@ -209,7 +209,7 @@ export const EquipmentColums: ColumnDef<Colum>[] = [
                 <AlertDialogHeader>
                   <AlertDialogTitle>¿Estás completamente seguro?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    {`Estás a punto de reintegrar al equipo ${equipment.id}, quien fue dado de baja por ${equipment.reason_for_termination} el día ${equipment.termination_date}. Al reintegrar al equipo, se borrarán estas razones. Si estás seguro de que deseas reintegrarlo, haz clic en 'Continuar'. De lo contrario, haz clic en 'Cancelar'.`}
+                    {`Estás a punto de reintegrar al equipo ${equipment?.id}, quien fue dado de baja por ${equipment.reason_for_termination} el día ${equipment.termination_date}. Al reintegrar al equipo, se borrarán estas razones. Si estás seguro de que deseas reintegrarlo, haz clic en 'Continuar'. De lo contrario, haz clic en 'Cancelar'.`}
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -346,7 +346,7 @@ export const EquipmentColums: ColumnDef<Colum>[] = [
                       Dar de baja equipo
                     </Button>
                   ) : (
-                    <Button variant="primary" onClick={() => handleOpenIntegerModal(equipment.id)} className="text-sm">
+                    <Button variant="primary" onClick={() => handleOpenIntegerModal(equipment?.id)} className="text-sm">
                       Reintegrar Equipo
                     </Button>
                   )}
@@ -370,7 +370,7 @@ export const EquipmentColums: ColumnDef<Colum>[] = [
     },
     cell: ({ row }: { row: any }) => {
       return (
-        <Link href={`/dashboard/equipment/action?action=view&id=${row.original.id}`} className="hover:underline">
+        <Link href={`/dashboard/equipment/action?action=view&id=${row.original?.id}`} className="hover:underline">
           {row.original.intern_number}
         </Link>
       );
@@ -410,14 +410,14 @@ export const EquipmentColums: ColumnDef<Colum>[] = [
     accessorKey: 'type',
     header: 'Tipo',
     cell: ({ row }) => {
-      return <Badge>{row.original.type.name}</Badge>;
+      return <Badge>{row.original.type?.name}</Badge>;
     },
   },
   {
     accessorKey: 'types_of_vehicles',
     header: 'Tipos de vehículos',
     cell: ({ row }) => {
-      return <Badge>{row.original.types_of_vehicles.name}</Badge>;
+      return <Badge>{row.original.types_of_vehicles?.name}</Badge>;
     },
   },
 
@@ -434,9 +434,8 @@ export const EquipmentColums: ColumnDef<Colum>[] = [
     accessorKey: 'allocated_to',
     header: 'Afectado a',
     cell: ({ row }) => {
-
       return row.original.contractor_equipment?.map((contractor) => {
-        return <Badge key={contractor.contractor_id.id}>{contractor.contractor_id.name}</Badge>;
+        return <Badge key={contractor.contractor_id?.id}>{contractor.contractor_id?.name}</Badge>;
       });
     },
     filterFn: (row, columnId, filterValue) => {
@@ -444,7 +443,9 @@ export const EquipmentColums: ColumnDef<Colum>[] = [
       if (filterValue === 'sin afectar' && row.original.allocated_to === null) {
         return true;
       }
-      if (row.original.contractor_equipment?.some((contractor) => contractor.contractor_id.name.includes(filterValue))) {
+      if (
+        row.original.contractor_equipment?.some((contractor) => contractor.contractor_id?.name.includes(filterValue))
+      ) {
         return true;
       } else {
         return false;
@@ -489,7 +490,7 @@ export const EquipmentColums: ColumnDef<Colum>[] = [
     accessorKey: 'brand',
     header: 'Marca',
     cell: ({ row }) => {
-      return <div>{row.original.brand.name}</div>;
+      return <div>{row.original.brand?.name}</div>;
     },
   },
   {
@@ -503,7 +504,7 @@ export const EquipmentColums: ColumnDef<Colum>[] = [
     accessorKey: 'model',
     header: 'Modelo',
     cell: ({ row }) => {
-      return <div>{row.original.model.name}</div>;
+      return <div>{row.original.model?.name}</div>;
     },
   },
   {

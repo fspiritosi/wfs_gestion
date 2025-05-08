@@ -4,6 +4,40 @@ import { cookies } from 'next/headers';
 
 // Users-related actions
 
+export const UpdateFormAnswer = async (formAnswerId: string, newAnswer: any) => {
+  const cookiesStore = cookies();
+  const supabase = supabaseServer();
+  const company_id = cookiesStore.get('actualComp')?.value;
+  if (!company_id) return [];
+
+  // Obtener la respuesta anterior
+  const { data: oldData, error: fetchError } = await supabase
+    .from('form_answers')
+    .select('answer')
+    .eq('id', formAnswerId)
+    .single();
+
+  if (fetchError) {
+    console.log('Fetch error', fetchError);
+    return [];
+  }
+
+  // Merge respuestas (mantener lo anterior, sobrescribir con lo nuevo)
+  const safeOldAnswer = (oldData?.answer && typeof oldData.answer === 'object' && !Array.isArray(oldData.answer)) ? oldData.answer : {};
+  const mergedAnswer = { ...safeOldAnswer, ...newAnswer };
+
+  const { data, error } = await supabase
+    .from('form_answers')
+    .update({ answer: mergedAnswer })
+    .eq('id', formAnswerId);
+
+  if (error) {
+    console.log('Update error', error);
+  }
+
+  return data;
+};
+
 export const CreateNewFormAnswer = async (formId: string, formAnswer: any) => {
   const cookiesStore = cookies();
   const supabase = supabaseServer();
